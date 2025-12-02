@@ -1,7 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000'
+import combinedChapters from './data/combined_chapters_all_books_1_86_merged_final.json'
+import aliasData from './data/data.json'
+import groupedCharactersData from './data/middlemarch_characters_grouped.json'
+
+// Colors inspired by George Eliot Archive
+const GROUP_COLORS = {
+  'Central Characters': '#e6194B',         // strong red
+  'Brooke / Chettam Circle': '#3cb44b',    // bright green
+  'Vincy Family': '#4363d8',               // deep blue
+  'Garth Family': '#f58231',               // vivid orange
+  'Featherstone / Waule Family': '#911eb4',// purple
+  'Bulstrodes': '#ffe119',                 // bright yellow
+  'Clergy & Families': '#42d4f4',          // cyan
+  'Cadwalladers': '#f032e6',               // magenta
+  'Middlemarch Townspeople & Officials': '#a9a9a9' // neutral grey
+}
 
 const BOOKS = [
   { id: 1, title: 'Miss Brooke', chapters: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
@@ -14,18 +29,6 @@ const BOOKS = [
   { id: 8, title: 'Sunset and Sunrise', chapters: [72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86] },
 ]
 
-const GROUP_COLORS = {
-  'Central Characters': '#ff4757',
-  'Brooke / Chettam Circle': '#ffa502',
-  'Vincy Family': '#1e90ff',
-  'Garth Family': '#2ed573',
-  'Featherstone / Waule Family': '#a55eea',
-  'Bulstrodes': '#fd79a8',
-  'Clergy & Families': '#00b894',
-  'Cadwalladers': '#fdcb6e',
-  'Middlemarch Townspeople & Officials': '#b8b8b8'
-}
-
 // Create a map of chapter to book
 const CHAPTER_TO_BOOK = {}
 BOOKS.forEach(book => {
@@ -36,13 +39,109 @@ BOOKS.forEach(book => {
 
 const TOTAL_CHAPTERS = 86
 
+// ---------- helpers to mimic Flask logic (aliases + graph) ----------
+
+// build alias_index like in app.py (from data.json -> aliases_full)
+const aliasIndex = (() => {
+  const idx = {}
+  const entries = aliasData.aliases_full || []
+  for (const entry of entries) {
+    const canon = (entry.canonical_name || '').trim()
+    if (!canon) continue
+    for (const a of entry.aliases || []) {
+      idx[a.trim().toLowerCase()] = canon
+    }
+    // include canonical itself
+    idx[canon.toLowerCase()] = canon
+  }
+  return idx
+})()
+
+function cleanName(s) {
+  if (!s) return ''
+  return s.trim().replace(/\s+/g, ' ')
+}
+
+function canonicalize(name) {
+  if (!name) return ''
+  const key = name.trim().toLowerCase()
+  return aliasIndex[key] || cleanName(name)
+}
+
+function chapterKey(chNumber) {
+  return `Chapter ${chNumber}`
+}
+
+// NEW: display name changes based on chapter (marriage name changes, etc.)
+function getDisplayName(name, chapter) {
+  if (!name) return name
+
+  if (name === 'Mary Garth' && chapter === 86) {
+    return 'Mary Vincy'
+  }
+
+  if (name === 'Celia Brooke' && chapter >= 34) {
+    return 'Celia Chettam'
+  }
+
+  if (name === 'Dorothea Brooke' && chapter >= 19) {
+    return 'Dorothea Casaubon'
+  }
+
+  if (name === 'Rosamond Vincy' && chapter >= 42) {
+    return 'Rosamond Lydgate'
+  }
+
+  return name
+}
+
+// Build a graph for a single chapter using the same idea as Flask build_graph()
+function buildGraphForChapter(chNumber, minConn) {
+  const key = chapterKey(chNumber)
+  const chapterObj = combinedChapters[key] || {}
+  const interactions = chapterObj.interactions || []
+
+  const names = new Set()
+  const edgeCounter = new Map() // "u|||v" -> weight
+
+  for (const it of interactions) {
+    const a = canonicalize(it.character_1 || '')
+    const b = canonicalize(it.character_2 || '')
+    if (!a || !b || a === b) continue
+
+    const [u, v] = [a, b].sort()
+    const edgeKey = `${u}|||${v}`
+    edgeCounter.set(edgeKey, (edgeCounter.get(edgeKey) || 0) + 1)
+    names.add(u)
+    names.add(v)
+  }
+
+  const edges = []
+  const threshold = Math.max(1, parseInt(minConn, 10) || 1)
+
+  for (const [keyPair, w] of edgeCounter.entries()) {
+    if (w >= threshold) {
+      const [u, v] = keyPair.split('|||')
+      edges.push({ source: u, target: v, weight: w })
+    }
+  }
+
+  const nodes = Array.from(names).map(n => ({ id: n }))
+
+  return { nodes, links: edges }
+}
+
+// ----------------- React component -----------------
+
 export default function CharacterNetwork(){
   const [currentChapter, setCurrentChapter] = useState(1)
-  const [characterGroups, setCharacterGroups] = useState({})
+
+  // init with local groupedCharactersData instead of fetch
+  const [characterGroups] = useState(groupedCharactersData)
   
   const [minConn, setMinConn] = useState(1)
   const [layout, setLayout] = useState(220)
-  const [stats, setStats] = useState({nodes:0, links:0, avg:0, max:0})
+  const [stats, setStats] = useState({nodes:0, links:0, max:0})
   const [graph, setGraph] = useState({nodes:[], links:[]})
   const svgRef = useRef(null)
   const simRef = useRef(null)
@@ -50,19 +149,9 @@ export default function CharacterNetwork(){
   // Get current book info
   const currentBook = CHAPTER_TO_BOOK[currentChapter]
 
-  // Fetch character groups on mount
-  useEffect(() => {
-    fetch(`${API_BASE}/characters/grouped`)
-      .then(r => r.json())
-      .then(data => {
-        setCharacterGroups(data)
-      })
-      .catch(e => console.error('Failed to fetch character groups:', e))
-  }, [])
-
   // Helper function to find which group a character belongs to
   const getCharacterGroup = (characterName) => {
-    for (const [groupName, members] of Object.entries(characterGroups)) {
+    for (const [groupName, members] of Object.entries(characterGroups || {})) {
       if (members.includes(characterName)) {
         return groupName
       }
@@ -70,43 +159,31 @@ export default function CharacterNetwork(){
     return 'Middlemarch Townspeople & Officials' // default
   }
 
-  // Fetch graph data when chapter changes
+  // Build graph data when chapter or minConn changes
   useEffect(()=>{
-    const params = new URLSearchParams()
-    params.set('start', String(currentChapter))
-    params.set('end', String(currentChapter))
-    params.set('minConn', String(minConn))
+    const data = buildGraphForChapter(currentChapter, minConn)
+    const graphData = data || { nodes: [], links: [] }
 
-    fetch(`${API_BASE}/graph?${params.toString()}`)
-      .then(r=>r.json())
-      .then(res=>{
-        const data = res?.graph || {nodes:[], links:[]}
-        
-        // Calculate node degrees
-        const degreeMap = {}
-        data.nodes.forEach(n => degreeMap[n.id] = 0)
-        data.links.forEach(l => {
-          degreeMap[l.source] = (degreeMap[l.source] || 0) + 1
-          degreeMap[l.target] = (degreeMap[l.target] || 0) + 1
-        })
-        
-        // Add degree and group info to nodes
-        data.nodes.forEach(n => {
-          n.connections = degreeMap[n.id] || 0
-          n.group = getCharacterGroup(n.id)
-        })
-        
-        setGraph(data)
-        
-        const totalCharacters = data.nodes.length
-        const totalConnections = data.links.length
-        const avgConnections = totalCharacters ? (totalConnections * 2 / totalCharacters).toFixed(1) : 0
-        const maxConnections = totalCharacters ? Math.max(0, ...data.nodes.map(n => n.connections || 0)) : 0
-        setStats({nodes: totalCharacters, links: totalConnections, avg: avgConnections, max: maxConnections})
-      })
-      .catch(e=>{
-        console.error('Failed to fetch graph:', e)
-      })
+    // Calculate node degrees
+    const degreeMap = {}
+    graphData.nodes.forEach(n => { degreeMap[n.id] = 0 })
+    graphData.links.forEach(l => {
+      degreeMap[l.source] = (degreeMap[l.source] || 0) + 1
+      degreeMap[l.target] = (degreeMap[l.target] || 0) + 1
+    })
+    
+    // Add degree and group info to nodes
+    graphData.nodes.forEach(n => {
+      n.connections = degreeMap[n.id] || 0
+      n.group = getCharacterGroup(n.id)
+    })
+    
+    setGraph(graphData)
+    
+    const totalCharacters = graphData.nodes.length
+    const totalConnections = graphData.links.length
+    const maxConnections = totalCharacters ? Math.max(0, ...graphData.nodes.map(n => n.connections || 0)) : 0
+    setStats({nodes: totalCharacters, links: totalConnections, max: maxConnections})
   }, [currentChapter, minConn, characterGroups])
 
   useEffect(()=>{
@@ -168,9 +245,11 @@ export default function CharacterNetwork(){
     svg.call(zoom)
     const tooltip = d3.select('body').append('div')
       .style('position','absolute').style('pointer-events','none')
-      .style('background','rgba(0,0,0,0.9)').style('color','#fff')
-      .style('padding','8px 10px').style('border-radius','10px')
-      .style('font','12px system-ui').style('opacity',0)
+      .style('background','#fdf7ee').style('color','#3a2a22')
+      .style('border','1px solid #d4c7b4')
+      .style('padding','8px 10px').style('border-radius','6px')
+      .style('font','12px Georgia, "Times New Roman", serif')
+      .style('opacity',0)
       .style('z-index', '9999')
 
     // Use the components we already calculated
@@ -179,52 +258,68 @@ export default function CharacterNetwork(){
     // Sort components by size (largest first)
     components.sort((a, b) => b.length - a.length)
     
-    // Assign target positions for each component
-    const componentSpacing = 300
     const nodeMap = new Map()
     graph.nodes.forEach(n => nodeMap.set(n.id, n))
-    
+
     components.forEach((comp, idx) => {
-      const yOffset = idx * componentSpacing
+      const baseY = (height / (components.length + 1)) * (idx + 1)
+
       comp.forEach(nodeId => {
         const node = nodeMap.get(nodeId)
         if (node) {
           node.componentIndex = idx
-          node.yOffset = yOffset
+
+          // vertical jitter so they don't all sit on one line
+          if (node.jitterY == null) {
+            node.jitterY = (Math.random() - 0.5) * 80   // ±40px
+          }
+
+          node.targetY = baseY + node.jitterY
         }
       })
     })
 
     const simulation = d3.forceSimulation(graph.nodes)
-      .force('link', d3.forceLink(graph.links).id(d=>d.id).strength(0.15).distance(d => 120 + (d.weight || 1) * 15))
+      .force(
+        'link',
+        d3.forceLink(graph.links)
+          .id(d => d.id)
+          .strength(0.15)
+          .distance(d => 120 + (d.weight || 1) * 15)
+      )
       .force('charge', d3.forceManyBody().strength(-Number(layout) * 3.5))
-      .force('collision', d3.forceCollide().radius(d=>35 + 5*Math.sqrt(d.connections || 0)))
-      .force('y', d3.forceY(d => (height / (components.length + 1)) * (d.componentIndex + 1) + d.yOffset).strength(0.3))
+      .force('collision', d3.forceCollide().radius(d => 35 + 5 * Math.sqrt(d.connections || 0)))
+      .force(
+        'y',
+        d3.forceY(d => d.targetY ?? (height / 2)).strength(0.12)
+      )
       .force('x', d3.forceX(width / 2).strength(0.05))
       .alphaDecay(0.01)
       .velocityDecay(0.4)
     
     simRef.current = simulation
     
-    // Stop simulation after nodes settle, but don't auto-fix positions
+    // Stop simulation after nodes settle
     setTimeout(() => {
       simulation.stop()
     }, 15000)
 
     const link = g.append('g').selectAll('line')
       .data(graph.links).enter().append('line')
-      .attr('stroke','#fff').attr('stroke-opacity',0.4)
+      .attr('stroke','#b89b7a')
+      .attr('stroke-opacity',0.55)
       .attr('stroke-width', d=>0.8 + 1.2*Math.sqrt((d.weight ?? 1)))
 
     const getColor = (node) => {
-      return GROUP_COLORS[node.group] || '#b8b8b8'
+      return GROUP_COLORS[node.group] || '#8a7b6a'
     }
 
     const node = g.append('g').selectAll('circle')
       .data(graph.nodes).enter().append('circle')
       .attr('r', d=>5 + 2.5*Math.sqrt(d.connections||1))
       .attr('fill', d=>getColor(d))
-      .attr('stroke','#fff').attr('stroke-width',2)
+      .attr('stroke','#5c4638')
+      .attr('stroke-width',1.6)
       .style('cursor','pointer')
       .call(d3.drag()
         .on('start', (event,d)=>{ 
@@ -238,13 +333,14 @@ export default function CharacterNetwork(){
         })
         .on('end',  (event,d)=>{ 
           if(!event.active) simulation.alphaTarget(0)
-          // Keep node fixed where user dragged it
           d.fx = event.x
           d.fy = event.y
         }))
       .on('mouseover', (event,d)=>{
-        tooltip.transition().duration(120).style('opacity',0.95)
-        tooltip.html(`<strong>${d.id}</strong><br/>Group: ${d.group}<br/>Connections: ${d.connections||0}`)
+        tooltip.transition().duration(120).style('opacity',0.97)
+        tooltip.html(
+          `<strong>${getDisplayName(d.id, currentChapter)}</strong><br/>Group: ${d.group}<br/>Connections: ${d.connections||0}`
+        )
           .style('left', (event.pageX+10)+'px').style('top', (event.pageY-28)+'px')
       })
       .on('mouseout', ()=> tooltip.transition().duration(200).style('opacity',0))
@@ -253,16 +349,23 @@ export default function CharacterNetwork(){
       .data(graph.nodes.filter(n=>n.group === 'Central Characters' || n.connections >= 15))
       .enter().append('text')
       .text(d=> {
-        // Show full name for central characters, last name only for others
+        const display = getDisplayName(d.id, currentChapter)
+
+        // Show full name for central characters
         if (d.group === 'Central Characters') {
-          return d.id
+          return display
         }
-        return d.id.includes(' ') ? d.id.split(' ').slice(-1)[0] : d.id
+
+        // Last name only for others
+        return display.includes(' ')
+          ? display.split(' ').slice(-1)[0]
+          : display
       })
       .attr('text-anchor','middle')
       .attr('dy', -15)
-      .style('fill','#fff').style('font','bold 12px system-ui').style('pointer-events','none')
-      .style('text-shadow','1px 1px 4px rgba(0,0,0,.95), -1px -1px 4px rgba(0,0,0,.95), 1px -1px 4px rgba(0,0,0,.95), -1px 1px 4px rgba(0,0,0,.95)')
+      .style('fill','#3b2b26')
+      .style('font','bold 12px Georgia, "Times New Roman", serif')
+      .style('pointer-events','none')
 
     simulation.on('tick', ()=>{
       link.attr('x1', d=>d.source.x).attr('y1', d=>d.source.y)
@@ -272,7 +375,7 @@ export default function CharacterNetwork(){
     })
 
     return ()=>{ simulation.stop(); tooltip.remove() }
-  }, [graph, layout])
+  }, [graph, layout, currentChapter])
 
   const groupDistribution = graph.nodes.reduce((acc, n) => {
     acc[n.group] = (acc[n.group] || 0) + 1
@@ -280,20 +383,47 @@ export default function CharacterNetwork(){
   }, {})
 
   return (
-    <div style={{fontFamily:'system-ui, -apple-system, Segoe UI, Roboto', color:'#fff', background:'linear-gradient(135deg,#667eea,#764ba2)', minHeight:'100vh'}}>
-      <div style={{maxWidth:1100, margin:'0 auto', padding:'20px'}}>
-        <div style={{background:'rgba(255,255,255,.1)', borderRadius:16, padding:20, textAlign:'center'}}>
-          <h1 style={{margin:0, fontSize:28}}>Middlemarch — Character Network</h1>
-          <p style={{margin:6, opacity:.95}}>Characters colored by family/social groups; edges show interaction counts.</p>
+    <div
+      style={{
+        fontFamily:'Georgia, "Times New Roman", serif',
+        color:'#3b2b26',
+        background:'#ffffff',
+        minHeight:'100vh'
+      }}
+    >
+      <div style={{maxWidth:1100, margin:'0 auto', padding:'24px 16px 32px'}}>
+        <div
+          style={{
+            background:'#f5f0e6',
+            borderRadius:8,
+            padding:20,
+            textAlign:'center',
+            border:'1px solid #d4c7b4'
+          }}
+        >
+          <h1 style={{margin:0, fontSize:28, color:'#b22a2f', letterSpacing:0.5}}>
+            Middlemarch — Character Network
+          </h1>
+          <p style={{margin:6, opacity:.95}}>
+            Characters colored by family and social groups; edges show interaction counts.
+          </p>
         </div>
 
         {/* Chronological Slider Section */}
-        <div style={{background:'rgba(255,255,255,.1)', borderRadius:14, padding:20, marginTop:16}}>
+        <div
+          style={{
+            background:'#f5f0e6',
+            borderRadius:8,
+            padding:20,
+            marginTop:16,
+            border:'1px solid #d4c7b4'
+          }}
+        >
           <div style={{textAlign:'center', marginBottom:16}}>
-            <div style={{fontSize:20, fontWeight:600, marginBottom:4}}>
+            <div style={{fontSize:18, fontWeight:600, marginBottom:4}}>
               Book {currentBook.id}: {currentBook.title}
             </div>
-            <div style={{fontSize:28, fontWeight:700}}>
+            <div style={{fontSize:24, fontWeight:700, color:'#b22a2f'}}>
               Chapter {currentChapter}
             </div>
           </div>
@@ -302,12 +432,12 @@ export default function CharacterNetwork(){
             <button
               onClick={() => setCurrentChapter(1)}
               style={{
-                padding:'10px 16px',
-                borderRadius:8,
-                border:'none',
-                background:'rgba(255,255,255,.2)',
+                padding:'8px 14px',
+                borderRadius:4,
+                border:'1px solid #b22a2f',
+                background:'#b22a2f',
                 color:'#fff',
-                fontSize:14,
+                fontSize:13,
                 cursor:'pointer',
                 fontWeight:500
               }}
@@ -315,7 +445,7 @@ export default function CharacterNetwork(){
               Reset
             </button>
             <div style={{flex:1, display:'flex', alignItems:'center', gap:8}}>
-              <span style={{fontSize:13, minWidth:30}}>Ch 1</span>
+              <span style={{fontSize:12, minWidth:30}}>Ch 1</span>
               <input
                 type="range"
                 min={1}
@@ -325,13 +455,13 @@ export default function CharacterNetwork(){
                 style={{
                   flex:1,
                   cursor:'pointer',
-                  height:8,
-                  borderRadius:4,
+                  height:6,
+                  borderRadius:3,
                   appearance:'none',
-                  background:`linear-gradient(to right, rgba(255,255,255,.4) 0%, rgba(255,255,255,.4) ${(currentChapter/TOTAL_CHAPTERS)*100}%, rgba(255,255,255,.15) ${(currentChapter/TOTAL_CHAPTERS)*100}%, rgba(255,255,255,.15) 100%)`
+                  background:`linear-gradient(to right, #b22a2f ${(currentChapter/TOTAL_CHAPTERS)*100}%, #e0d4c2 ${(currentChapter/TOTAL_CHAPTERS)*100}%)`
                 }}
               />
-              <span style={{fontSize:13, minWidth:30, textAlign:'right'}}>Ch 86</span>
+              <span style={{fontSize:12, minWidth:30, textAlign:'right'}}>Ch 86</span>
             </div>
           </div>
 
@@ -351,16 +481,16 @@ export default function CharacterNetwork(){
                     position:'absolute',
                     left:`${leftPercent}%`,
                     width:`${widthPercent}%`,
-                    height:20,
-                    background: isCurrentBook ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.1)',
-                    borderRadius:4,
+                    height:18,
+                    background: isCurrentBook ? '#b22a2f11' : '#e0d4c2',
+                    borderRadius:3,
                     display:'flex',
                     alignItems:'center',
                     justifyContent:'center',
-                    fontSize:11,
+                    fontSize:10,
                     fontWeight: isCurrentBook ? 600 : 400,
-                    opacity: isCurrentBook ? 1 : 0.7,
-                    border: isCurrentBook ? '2px solid rgba(255,255,255,.5)' : 'none'
+                    color: isCurrentBook ? '#b22a2f' : '#4a3a30',
+                    border: isCurrentBook ? '1px solid #b22a2f' : '1px solid #d4c7b4'
                   }}
                 >
                   Book {book.id}
@@ -370,9 +500,22 @@ export default function CharacterNetwork(){
           </div>
         </div>
 
-        <div style={{display:'flex', flexWrap:'wrap', gap:12, marginTop:12, background:'rgba(255,255,255,.1)', padding:16, borderRadius:14}}>
+        <div
+          style={{
+            display:'flex',
+            flexWrap:'wrap',
+            gap:12,
+            marginTop:12,
+            background:'#f5f0e6',
+            padding:16,
+            borderRadius:8,
+            border:'1px solid #d4c7b4'
+          }}
+        >
           <div style={{display:'flex', flexDirection:'column', minWidth:180}}>
-            <label style={{marginBottom:6, fontSize:14}}>Min Connections: {minConn}</label>
+            <label style={{marginBottom:6, fontSize:13}}>
+              Min Connections: <span style={{fontWeight:600}}>{minConn}</span>
+            </label>
             <input 
               type="range" 
               min={1} 
@@ -384,7 +527,9 @@ export default function CharacterNetwork(){
           </div>
 
           <div style={{display:'flex', flexDirection:'column', minWidth:180}}>
-            <label style={{marginBottom:6, fontSize:14}}>Layout Force: {layout}</label>
+            <label style={{marginBottom:6, fontSize:13}}>
+              Layout Force: <span style={{fontWeight:600}}>{layout}</span>
+            </label>
             <input 
               type="range" 
               min={50} 
@@ -396,23 +541,64 @@ export default function CharacterNetwork(){
           </div>
         </div>
 
-        <div style={{background:'rgba(255,255,255,.08)', borderRadius:16, padding:12, marginTop:12}}>
-          <div style={{marginBottom:8, fontSize:13, opacity:0.9, fontStyle:'italic'}}>
+        <div
+          style={{
+            background:'#f9f5ef',
+            borderRadius:8,
+            padding:12,
+            marginTop:12,
+            border:'1px solid #d4c7b4'
+          }}
+        >
+          <div style={{marginBottom:8, fontSize:12, opacity:0.9, fontStyle:'italic'}}>
             💡 Use mouse wheel to zoom, drag to pan • Drag nodes to reposition them
           </div>
-          <svg ref={svgRef} style={{width:'100%', minHeight:600, maxHeight:1200, height:'auto', display:'block', background:'rgba(0,0,0,.15)', borderRadius:12}} />
+          <svg
+            ref={svgRef}
+            style={{
+              width:'100%',
+              minHeight:600,
+              maxHeight:1200,
+              height:'auto',
+              display:'block',
+              background:'#f9f5ef',
+              borderRadius:6
+            }}
+          />
         </div>
 
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:12, marginTop:12}}>
+        <div
+          style={{
+            display:'grid',
+            gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',
+            gap:12,
+            marginTop:12
+          }}
+        >
           <CardStat label="Characters shown" value={stats.nodes} />
           <CardStat label="Connections" value={stats.links} />
-          <CardStat label="Avg degree" value={stats.avg} />
           <CardStat label="Max degree" value={stats.max} />
         </div>
 
-        <div style={{background:'rgba(255,255,255,.1)', borderRadius:12, padding:16, marginTop:12}}>
-          <h3 style={{margin:'0 0 12px 0', fontSize:16}}>Character Groups</h3>
-          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12}}>
+        <div
+          style={{
+            background:'#f5f0e6',
+            borderRadius:8,
+            padding:16,
+            marginTop:12,
+            border:'1px solid #d4c7b4'
+          }}
+        >
+          <h3 style={{margin:'0 0 12px 0', fontSize:16, color:'#b22a2f'}}>
+            Character Groups
+          </h3>
+          <div
+            style={{
+              display:'grid',
+              gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',
+              gap:12
+            }}
+          >
             {Object.entries(GROUP_COLORS).map(([groupName, color]) => (
               <LegendItem 
                 key={groupName}
@@ -422,7 +608,14 @@ export default function CharacterNetwork(){
               />
             ))}
           </div>
-          <div style={{fontSize:13, opacity:0.85, fontStyle:'italic', marginTop:12}}>
+          <div
+            style={{
+              fontSize:12,
+              opacity:0.85,
+              fontStyle:'italic',
+              marginTop:12
+            }}
+          >
             Central characters and highly connected characters (15+ connections) show labels.
           </div>
         </div>
@@ -433,18 +626,34 @@ export default function CharacterNetwork(){
 
 function CardStat({label, value}){
   return (
-    <div style={{background:'rgba(255,255,255,.1)', borderRadius:12, padding:12, textAlign:'center'}}>
-      <div style={{fontSize:28, fontWeight:700}}>{value}</div>
-      <div style={{opacity:.9}}>{label}</div>
+    <div
+      style={{
+        background:'#f5f0e6',
+        borderRadius:8,
+        padding:12,
+        textAlign:'center',
+        border:'1px solid #d4c7b4'
+      }}
+    >
+      <div style={{fontSize:24, fontWeight:700, color:'#b22a2f'}}>{value}</div>
+      <div style={{opacity:.9, fontSize:13}}>{label}</div>
     </div>
   )
 }
 
 function LegendItem({color, label, count}){
   return (
-    <div style={{display:'flex', alignItems:'center', gap:8}}>
-      <div style={{width:16, height:16, borderRadius:'50%', background:color, border:'2px solid #fff'}} />
-      <span style={{fontSize:13, opacity:.95}}>{label} ({count})</span>
+    <div style={{display:'flex', alignItems:'center', gap:8, fontSize:13}}>
+      <div
+        style={{
+          width:14,
+          height:14,
+          borderRadius:'50%',
+          background:color,
+          border:'1px solid #5c4638'
+        }}
+      />
+      <span style={{opacity:.95}}>{label} ({count})</span>
     </div>
   )
 }
