@@ -51,14 +51,22 @@ const GraphView = () => {
     <Box w="100%" h="100%" bg="gray.0" pos="relative">
       <Paper
         pos="absolute"
-        top={16}
-        left={60} // Moved slightly right to avoid collision with sidebar toggle
-        p="xs"
-        shadow="sm"
+        top={20}
+        left="50%"
+        px="lg"
+        py="xs"
+        shadow="md"
+        radius="md"
         withBorder
-        style={{ zIndex: 10, backdropFilter: 'blur(4px)', backgroundColor: 'rgba(255, 255, 255, 0.8)' }}
+        style={{
+          zIndex: 10,
+          backdropFilter: 'blur(8px)',
+          backgroundColor: 'rgba(255, 255, 255, 0.85)',
+          transform: 'translateX(-50%)',
+          border: '1px solid rgba(0, 0, 0, 0.1)'
+        }}
       >
-        <Text size="sm" ff="serif">
+        <Text size="md" fw={600} ff="serif" c="dark.4">
           Viewing: {bookId?.replace(/([A-Z])/g, ' $1').trim()} - Chapter {chapterId}
         </Text>
       </Paper>
