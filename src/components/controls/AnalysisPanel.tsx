@@ -62,14 +62,14 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ nodes, links }) => {
             {/* Overview Stats */}
             <Group grow>
                 <Paper p="xs" withBorder bg="gray.0">
-                    <Group justify="space-between" mb={4}>
+                    <Group justify="space-between" mb={4} wrap="nowrap">
                         <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Density</Text>
                         <InfoTooltip label="The proportion of potential connections that actually exist in the network." />
                     </Group>
                     <Text size="xl" fw={700} c="primary">{stats.density}%</Text>
                 </Paper>
                 <Paper p="xs" withBorder bg="gray.0">
-                    <Group justify="space-between" mb={4}>
+                    <Group justify="space-between" mb={4} wrap="nowrap">
                         <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Characters</Text>
                         <InfoTooltip label="Total number of characters currently visible in the graph." />
                     </Group>

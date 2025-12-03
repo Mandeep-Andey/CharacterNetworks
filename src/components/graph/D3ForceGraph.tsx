@@ -22,8 +22,7 @@ const COMMUNITY_COLORS = [
     '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000'
 ];
 
-// Gradient for focus mode (based on degree)
-const FOCUS_COLOR_SCALE = d3.scaleSequential(d3.interpolateViridis).domain([0, 20]);
+
 
 const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     nodes,
@@ -89,13 +88,13 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
 
         // --- Force Simulation ---
         const simulation = d3.forceSimulation(filteredNodes as d3.SimulationNodeDatum[])
-            .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(50))
-            .force("charge", d3.forceManyBody().strength(-forceStrength * 5))
-            .force("collide", d3.forceCollide().radius((d: any) => (d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6) + 2));
+            .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(80)) // Increased distance
+            .force("charge", d3.forceManyBody().strength(-300)) // Much stronger repulsion
+            .force("collide", d3.forceCollide().radius((d: any) => (d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6) + 15).iterations(2)); // More padding
 
-        // ALWAYS use segregated view forces
-        simulation.force("x", d3.forceX((d: any) => communityCenters[d.community || 0]?.x || width / 2).strength(0.3));
-        simulation.force("y", d3.forceY((d: any) => communityCenters[d.community || 0]?.y || height / 2).strength(0.3));
+        // ALWAYS use segregated view forces but with much gentler pull
+        simulation.force("x", d3.forceX((d: any) => communityCenters[d.community || 0]?.x || width / 2).strength(0.08)); // Reduced from 0.3
+        simulation.force("y", d3.forceY((d: any) => communityCenters[d.community || 0]?.y || height / 2).strength(0.08)); // Reduced from 0.3
 
         // --- Rendering ---
 
@@ -132,17 +131,25 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             .join("circle")
             .attr("r", (d) => d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6)
             .attr("fill", (d) => {
-                // We can still use the activeCommunity state to highlight nodes, 
-                // but we won't change their position.
-                if (activeCommunity !== null) {
-                    if (d.community === activeCommunity) {
-                        return FOCUS_COLOR_SCALE(d.degree || 0);
+                const baseColor = COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length];
+
+                // If a community is active and this node belongs to it, use a gradient palette
+                if (activeCommunity !== null && d.community === activeCommunity) {
+                    // Create a dynamic scale based on the community's base color
+                    // We want a range from a lighter version to a darker version of the base color
+                    const color = d3.color(baseColor);
+                    if (color) {
+                        const interpolator = d3.interpolateRgb(
+                            color.brighter(1.5).formatHex(), // Lighter for low degree
+                            color.darker(2).formatHex()      // Darker for high degree
+                        );
+                        // Map degree 0-20 to the color scale
+                        // We clamp the input to 0-1 range for the interpolator
+                        const t = Math.min(Math.max((d.degree || 0) / 25, 0), 1);
+                        return interpolator(t);
                     }
-                    // Keep original color but maybe dimmed? Or grey?
-                    // Let's keep original color but dimmed to show context
-                    return COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length];
                 }
-                return COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length];
+                return baseColor;
             })
             .attr("opacity", (d) => {
                 if (activeCommunity !== null && d.community !== activeCommunity) return 0.1;
@@ -168,9 +175,9 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 event.stopPropagation();
                 if (activeCommunity === null || activeCommunity !== d.community) {
                     setActiveCommunity(d.community || 0);
-                } else {
-                    setSelectedNode(d as Node);
                 }
+                // ALWAYS select the node, even if we just zoomed in
+                setSelectedNode(d as Node);
             })
             .on("mouseover", (event, d) => {
                 setTooltip({
@@ -278,7 +285,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         return () => {
             simulation.stop();
         };
-    }, [filteredNodes, filteredLinks, width, height, forceStrength, searchTerm, selectedNode, setSelectedNode]); // Removed activeCommunity from dependency array to prevent re-render
+    }, [filteredNodes, filteredLinks, width, height, forceStrength, searchTerm, selectedNode, setSelectedNode, activeCommunity]);
 
     // Handle Zoom to Community Effect
     useEffect(() => {
