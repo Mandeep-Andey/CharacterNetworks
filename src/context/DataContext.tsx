@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import combinedChaptersData from '../data/combined_chapters_all_books_1_86_merged_final.json';
 import chapterToBookData from '../data/chapter_to_book.json';
 import charactersGroupedData from '../data/middlemarch_characters_grouped.json';
+import { detectCommunities } from '../utils/louvain';
+
+import aliasesData from '../data/aliases.json';
 
 // Define types based on expected JSON structure
 export interface InteractionDetail {
@@ -13,7 +16,8 @@ export interface Node {
     id: string;
     group: number;
     groupName: string;
-    degree?: number; // Add degree for sizing
+    degree?: number;
+    community?: number;
 }
 
 export interface Link {
@@ -49,6 +53,19 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+// Helper to resolve aliases
+// Pre-process aliases for case-insensitive lookup
+const aliasMap = new Map<string, string>();
+Object.entries(aliasesData).forEach(([key, value]) => {
+    aliasMap.set(key.toLowerCase().trim(), value);
+});
+
+const resolveName = (name: string): string => {
+    if (!name) return "";
+    const lower = name.toLowerCase().trim();
+    return aliasMap.get(lower) || name.trim();
+};
+
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [data, setData] = useState<ChapterData>({});
     const [chapters, setChapters] = useState<BookChapters | null>(null);
@@ -63,6 +80,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             Object.keys(rawGroups).forEach((groupName, index) => {
                 rawGroups[groupName].forEach(charName => {
+                    // We should also map the canonical names in groups if they aren't already
+                    // But usually groups file uses canonical names.
                     groupMap.set(charName, { id: index + 1, name: groupName });
                 });
             });
@@ -74,32 +93,28 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             Object.keys(rawData).forEach(chapterKey => {
                 const chapter = rawData[chapterKey];
 
-                // Collect all unique characters from both the 'characters' list and 'interactions'
-                const uniqueChars = new Set<string>(chapter.characters || []);
+                // Collect all unique characters (resolved)
+                const uniqueChars = new Set<string>();
+
+                // Process explicit characters list
+                (chapter.characters || []).forEach((charName: string) => {
+                    uniqueChars.add(resolveName(charName));
+                });
+
+                // Process interactions to find characters and resolve them
                 (chapter.interactions || []).forEach((interaction: any) => {
-                    if (interaction.character_1) uniqueChars.add(interaction.character_1);
-                    if (interaction.character_2) uniqueChars.add(interaction.character_2);
+                    if (interaction.character_1) uniqueChars.add(resolveName(interaction.character_1));
+                    if (interaction.character_2) uniqueChars.add(resolveName(interaction.character_2));
                 });
 
-                // Create nodes
-                const nodes: Node[] = Array.from(uniqueChars).map((charName: string) => {
-                    const groupInfo = groupMap.get(charName) || { id: 0, name: 'Unknown' };
-                    return {
-                        id: charName,
-                        group: groupInfo.id,
-                        groupName: groupInfo.name,
-                        degree: 0 // Will be calculated based on links
-                    };
-                });
-
-                // Create links and aggregate interactions
+                // Create links first to use for community detection
                 const linkMap = new Map<string, Link>();
-
                 (chapter.interactions || []).forEach((interaction: any) => {
-                    const source = interaction.character_1;
-                    const target = interaction.character_2;
+                    const source = resolveName(interaction.character_1);
+                    const target = resolveName(interaction.character_2);
 
-                    // Ensure consistent ordering for the key to aggregate A->B and B->A
+                    if (!source || !target || source === target) return; // Skip invalid or self-loops if desired
+
                     const [p1, p2] = [source, target].sort();
                     const key = `${p1}|${p2}`;
 
@@ -122,8 +137,23 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         });
                     }
                 });
-
                 const links = Array.from(linkMap.values());
+
+                // Detect communities
+                const nodesForCommunity = Array.from(uniqueChars).map(id => ({ id }));
+                const communities = detectCommunities(nodesForCommunity, links);
+
+                // Create nodes with community info
+                const nodes: Node[] = Array.from(uniqueChars).map((charName: string) => {
+                    const groupInfo = groupMap.get(charName) || { id: 0, name: 'Unknown' };
+                    return {
+                        id: charName,
+                        group: groupInfo.id,
+                        groupName: groupInfo.name,
+                        degree: 0,
+                        community: communities[charName] || 0
+                    };
+                });
 
                 // Calculate degrees
                 const degreeMap = new Map<string, number>();
@@ -139,10 +169,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 transformedData[chapterKey] = { nodes, links };
             });
 
-            // Transform chapter-to-book mapping into Book -> Chapters structure
+            // Transform chapter-to-book mapping
             const rawChapterToBook = chapterToBookData as Record<string, number>;
             const bookChaptersMap: BookChapters = {};
-
             const toRoman = (num: number) => {
                 const roman = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
                 return roman[num] || num.toString();
@@ -156,7 +185,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 bookChaptersMap[bookName].push(parseInt(chapterStr));
             });
 
-            // Sort chapters for each book
             Object.keys(bookChaptersMap).forEach(book => {
                 bookChaptersMap[book].sort((a, b) => a - b);
             });

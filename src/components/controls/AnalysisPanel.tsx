@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Stack, Text, Group, Badge, Paper, RingProgress, ScrollArea, Divider, Box } from '@mantine/core';
+import { Stack, Text, Group, Badge, Paper, RingProgress, ScrollArea, Divider, Box, Tooltip, ActionIcon } from '@mantine/core';
+import { IconInfoCircle } from '@tabler/icons-react';
 import { Node, Link } from '../../context/DataContext';
 
 interface AnalysisPanelProps {
@@ -48,21 +49,40 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ nodes, links }) => {
 
     if (!stats) return <Text c="dimmed" size="sm">No data available for analysis.</Text>;
 
+    const InfoTooltip = ({ label }: { label: string }) => (
+        <Tooltip label={label} multiline w={220} withArrow position="top">
+            <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
+                <IconInfoCircle size={14} />
+            </ActionIcon>
+        </Tooltip>
+    );
+
     return (
         <Stack gap="md">
             {/* Overview Stats */}
             <Group grow>
                 <Paper p="xs" withBorder bg="gray.0">
-                    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Density</Text>
+                    <Group justify="space-between" mb={4}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Density</Text>
+                        <InfoTooltip label="The proportion of potential connections that actually exist in the network." />
+                    </Group>
                     <Text size="xl" fw={700} c="primary">{stats.density}%</Text>
                 </Paper>
                 <Paper p="xs" withBorder bg="gray.0">
-                    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Characters</Text>
+                    <Group justify="space-between" mb={4}>
+                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Characters</Text>
+                        <InfoTooltip label="Total number of characters currently visible in the graph." />
+                    </Group>
                     <Text size="xl" fw={700} c="primary">{stats.totalNodes}</Text>
                 </Paper>
             </Group>
 
-            <Divider label="Top Characters" labelPosition="center" />
+            <Divider label={
+                <Group gap={4}>
+                    <Text size="xs" fw={500}>Top Characters</Text>
+                    <InfoTooltip label="Characters with the most connections (highest degree)." />
+                </Group>
+            } labelPosition="center" />
 
             {/* Top Characters List */}
             <Stack gap="xs">
@@ -79,7 +99,12 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ nodes, links }) => {
                 ))}
             </Stack>
 
-            <Divider label="Interaction Types" labelPosition="center" />
+            <Divider label={
+                <Group gap={4}>
+                    <Text size="xs" fw={500}>Interaction Types</Text>
+                    <InfoTooltip label="Distribution of different types of interactions logged in the text." />
+                </Group>
+            } labelPosition="center" />
 
             {/* Interaction Types Distribution */}
             <ScrollArea h={150}>

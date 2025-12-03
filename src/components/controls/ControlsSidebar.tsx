@@ -4,7 +4,8 @@ import { useSelection } from '../../context/SelectionContext';
 import { useControls } from '../../context/ControlsContext';
 import { useData } from '../../context/DataContext';
 import AnalysisPanel from './AnalysisPanel';
-import { Stack, Title, Text, Slider, TextInput, Paper, Divider, Box, Button, Group, Badge, ScrollArea, Accordion, ThemeIcon, Tabs, Checkbox, MultiSelect } from '@mantine/core';
+import { Stack, Title, Text, Slider, TextInput, Paper, Divider, Box, Button, Group, Badge, ScrollArea, Accordion, ThemeIcon, Tabs, Checkbox, MultiSelect, Tooltip, ActionIcon } from '@mantine/core';
+import { IconInfoCircle } from '@tabler/icons-react';
 
 const ControlsSidebar: React.FC = () => {
     const {
@@ -152,11 +153,25 @@ const ControlsSidebar: React.FC = () => {
                     <ScrollArea h="100%" offsetScrollbars>
                         <Stack gap="lg">
                             <Box>
-                                <Title order={6} mb="xs" tt="uppercase" c="dimmed">Graph Settings</Title>
+                                <Group gap={4} mb="xs">
+                                    <Title order={6} tt="uppercase" c="dimmed">Graph Settings</Title>
+                                    <Tooltip label="Adjust the visual layout and filtering of the graph." multiline w={220} withArrow position="top">
+                                        <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
+                                            <IconInfoCircle size={14} />
+                                        </ActionIcon>
+                                    </Tooltip>
+                                </Group>
                                 <Stack gap="xs">
                                     <Box>
                                         <Group justify="space-between" mb={4}>
-                                            <Text size="xs" fw={600}>Min Connections</Text>
+                                            <Group gap={4}>
+                                                <Text size="xs" fw={600}>Min Connections</Text>
+                                                <Tooltip label="Filter out characters with fewer than this many connections." multiline w={220} withArrow position="top">
+                                                    <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
+                                                        <IconInfoCircle size={12} />
+                                                    </ActionIcon>
+                                                </Tooltip>
+                                            </Group>
                                             <Badge variant="light" color="gray">{minConnections}</Badge>
                                         </Group>
                                         <Slider
@@ -170,7 +185,14 @@ const ControlsSidebar: React.FC = () => {
                                     </Box>
                                     <Box>
                                         <Group justify="space-between" mb={4}>
-                                            <Text size="xs" fw={600}>Force Strength</Text>
+                                            <Group gap={4}>
+                                                <Text size="xs" fw={600}>Force Strength</Text>
+                                                <Tooltip label="Adjust the repulsive force between nodes to spread them out." multiline w={220} withArrow position="top">
+                                                    <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
+                                                        <IconInfoCircle size={12} />
+                                                    </ActionIcon>
+                                                </Tooltip>
+                                            </Group>
                                             <Badge variant="light" color="gray">{forceStrength}</Badge>
                                         </Group>
                                         <Slider
@@ -188,7 +210,14 @@ const ControlsSidebar: React.FC = () => {
                             <Divider />
 
                             <Box>
-                                <Title order={6} mb="xs" tt="uppercase" c="dimmed">Groups</Title>
+                                <Group gap={4} mb="xs">
+                                    <Title order={6} tt="uppercase" c="dimmed">Groups</Title>
+                                    <Tooltip label="Filter characters by their family or social group." multiline w={220} withArrow position="top">
+                                        <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
+                                            <IconInfoCircle size={14} />
+                                        </ActionIcon>
+                                    </Tooltip>
+                                </Group>
                                 <MultiSelect
                                     data={availableGroups}
                                     value={selectedGroups.length > 0 ? selectedGroups : []}
@@ -204,7 +233,14 @@ const ControlsSidebar: React.FC = () => {
                             </Box>
 
                             <Box>
-                                <Title order={6} mb="xs" tt="uppercase" c="dimmed">Interaction Types</Title>
+                                <Group gap={4} mb="xs">
+                                    <Title order={6} tt="uppercase" c="dimmed">Interaction Types</Title>
+                                    <Tooltip label="Show or hide specific types of interactions." multiline w={220} withArrow position="top">
+                                        <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
+                                            <IconInfoCircle size={14} />
+                                        </ActionIcon>
+                                    </Tooltip>
+                                </Group>
                                 <Stack gap="xs">
                                     {availableInteractionTypes.map(type => (
                                         <Checkbox
