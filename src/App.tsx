@@ -1,61 +1,92 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { DataProvider } from './context/DataContext';
+import { DataProvider, useData } from './context/DataContext';
 import MainLayout from './components/layout/MainLayout';
 import D3ForceGraph from './components/graph/D3ForceGraph';
 
-// Mock data for graph
-const MOCK_NODES = [
-  { id: "Dorothea", group: 1 },
-  { id: "Casaubon", group: 1 },
-  { id: "Lydgate", group: 2 },
-  { id: "Rosamond", group: 2 },
-  { id: "Fred", group: 3 },
-  { id: "Mary", group: 3 },
-  { id: "Ladislaw", group: 1 },
-];
-
-const MOCK_LINKS = [
-  { source: "Dorothea", target: "Casaubon", value: 5 },
-  { source: "Dorothea", target: "Ladislaw", value: 3 },
-  { source: "Lydgate", target: "Rosamond", value: 5 },
-  { source: "Fred", target: "Mary", value: 4 },
-  { source: "Rosamond", target: "Fred", value: 1 },
-];
+import { Center, Text, Box, Paper } from '@mantine/core';
 
 const GraphView = () => {
   const { bookId, chapterId } = useParams();
+  const { data, loading } = useData();
+  const { selectedGroups, selectedInteractionTypes } = useControls();
 
-  // In a real app, we would filter data based on bookId and chapterId
-  // For now, we just pass the mock data
+  if (loading || !data) {
+    return <Center h="100%"><Text c="dimmed">Loading graph data...</Text></Center>;
+  }
+
+  // Construct key to match JSON structure (e.g., "BookI_1")
+  // Note: bookId from URL might be "BookI" and chapterId "1"
+  const dataKey = `Chapter ${chapterId}`;
+  const chapterData = data[dataKey];
+
+  if (!chapterData) {
+    return (
+      <Center h="100%">
+        <Text c="dimmed">Data not found for {bookId} Chapter {chapterId}</Text>
+      </Center>
+    );
+  }
+
+  // Apply filters
+  // 1. Filter Nodes by Group
+  const filteredNodes = chapterData.nodes.filter(node => {
+    if (selectedGroups.length === 0) return true; // No filter = show all
+    return selectedGroups.includes(node.groupName || 'Unknown');
+  });
+
+  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+
+  // 2. Filter Links by Interaction Type AND ensure both ends are in filtered nodes
+  const filteredLinks = chapterData.links.filter(link => {
+    // Check if both source and target are in filtered nodes
+    if (!filteredNodeIds.has(link.source) || !filteredNodeIds.has(link.target)) return false;
+
+    // Check interaction types
+    if (selectedInteractionTypes.length === 0) return true;
+    // Link must have at least one interaction of a selected type
+    return link.interactions.some(i => selectedInteractionTypes.includes(i.type));
+  });
 
   return (
-    <div className="w-full h-full bg-gray-50 flex flex-col">
-      <div className="absolute top-4 left-4 z-10 bg-white/80 backdrop-blur px-3 py-1 rounded shadow text-sm font-serif">
-        Viewing: {bookId} - Chapter {chapterId}
-      </div>
+    <Box w="100%" h="100%" bg="gray.0" pos="relative">
+      <Paper
+        pos="absolute"
+        top={16}
+        left={60} // Moved slightly right to avoid collision with sidebar toggle
+        p="xs"
+        shadow="sm"
+        withBorder
+        style={{ zIndex: 10, backdropFilter: 'blur(4px)', backgroundColor: 'rgba(255, 255, 255, 0.8)' }}
+      >
+        <Text size="sm" ff="serif">
+          Viewing: {bookId?.replace(/([A-Z])/g, ' $1').trim()} - Chapter {chapterId}
+        </Text>
+      </Paper>
       <D3ForceGraph
-        nodes={MOCK_NODES.map(n => ({ ...n }))} // Clone to avoid mutation issues in strict mode
-        links={MOCK_LINKS.map(l => ({ ...l }))}
+        nodes={filteredNodes.map(n => ({ ...n }))}
+        links={filteredLinks.map(l => ({ ...l }))}
       />
-    </div>
+    </Box>
   );
 };
 
 import { SelectionProvider } from './context/SelectionContext';
+import { ControlsProvider, useControls } from './context/ControlsContext';
 
 function App() {
   return (
     <Router>
       <DataProvider>
-        <SelectionProvider>
-          <Routes>
-            <Route path="/" element={<MainLayout />}>
-              <Route index element={<Navigate to="/BookI/1" replace />} />
-              <Route path=":bookId/:chapterId" element={<GraphView />} />
-            </Route>
-          </Routes>
-        </SelectionProvider>
+        <ControlsProvider>
+          <SelectionProvider>
+            <Routes>
+              <Route path="/" element={<MainLayout />}>
+                <Route index element={<Navigate to="/BookI/1" replace />} />
+                <Route path=":bookId/:chapterId" element={<GraphView />} />
+              </Route>
+            </Routes>
+          </SelectionProvider>
+        </ControlsProvider>
       </DataProvider>
     </Router>
   );

@@ -13,6 +13,7 @@ export default {
                 accent: 'var(--color-accent)',
                 bg: {
                     white: 'var(--color-bg-white)',
+                    'off-white': 'var(--color-bg-off-white)',
                 }
             },
             fontFamily: {

@@ -2,30 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  /* Colors extracted from georgeeliotarchive.org style */
-  --color-primary-dark: #2c3e50; /* Example dark blue/grey */
-  --color-bg-white: #ffffff;
-  --color-accent: #e74c3c; /* Example accent */
-  --color-text-main: #333333;
-  --color-border: #dddddd;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  /* Fonts */
-  --font-serif: "Merriweather", "Georgia", serif;
-  --font-sans: "Open Sans", "Helvetica Neue", sans-serif;
-}
+/* 
+  Mantine handles most global styles, but we keep Tailwind directives 
+  for utility classes used in D3 logic or legacy components if any.
+*/
+
+/* 
+   Mantine Theme overrides these, but we can keep them for reference 
+   or if we use raw CSS variables somewhere.
+*/
 
 body {
   margin: 0;
-  font-family: var(--font-sans);
-  color: var(--color-text-main);
-  background-color: var(--color-bg-white);
+  /* Font family is handled by MantineProvider */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-serif);
-  font-weight: 700;
-  color: var(--color-primary-dark);
+/* Custom Scrollbar - Optional, can be kept for better aesthetics */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
 }

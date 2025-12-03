@@ -1,29 +1,34 @@
 import React from 'react';
+import { ScrollArea, Stack, Group, ColorSwatch, Text } from '@mantine/core';
 import * as d3 from 'd3';
-
-// Mock groups for now, ideally passed from parent or context
-const GROUPS = [
-    { id: 1, label: "Brooke Family" },
-    { id: 2, label: "Vincy Family" },
-    { id: 3, label: "Garth Family" },
-    { id: 4, label: "Others" }
-];
+import { useData } from '../../context/DataContext';
 
 const Legend: React.FC = () => {
+    const { groups } = useData();
     const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
+    if (!groups) return null;
+
+    const groupItems = Object.keys(groups).map((name, index) => ({
+        id: index + 1,
+        name: name
+    }));
+
     return (
-        <div className="space-y-2">
-            {GROUPS.map((group) => (
-                <div key={group.id} className="flex items-center space-x-2">
-                    <span
-                        className="w-3 h-3 rounded-full inline-block"
-                        style={{ backgroundColor: colorScale(group.id.toString()) }}
-                    ></span>
-                    <span className="text-sm text-gray-600">{group.label}</span>
-                </div>
-            ))}
-        </div>
+        <ScrollArea.Autosize mah={240} type="auto">
+            <Stack gap="xs">
+                {groupItems.map((group) => (
+                    <Group key={group.id} gap="xs">
+                        <ColorSwatch
+                            color={colorScale(group.id.toString())}
+                            size={12}
+                            radius="xl"
+                        />
+                        <Text size="sm" c="dimmed">{group.name}</Text>
+                    </Group>
+                ))}
+            </Stack>
+        </ScrollArea.Autosize>
     );
 };
 
