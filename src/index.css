@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Colors extracted from georgeeliotarchive.org style */
+  --color-primary-dark: #2c3e50; /* Example dark blue/grey */
+  --color-bg-white: #ffffff;
+  --color-accent: #e74c3c; /* Example accent */
+  --color-text-main: #333333;
+  --color-border: #dddddd;
+
+  /* Fonts */
+  --font-serif: "Merriweather", "Georgia", serif;
+  --font-sans: "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-text-main);
+  background-color: var(--color-bg-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
