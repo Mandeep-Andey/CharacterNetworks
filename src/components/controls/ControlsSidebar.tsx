@@ -12,6 +12,7 @@ const ControlsSidebar: React.FC = () => {
         minConnections, setMinConnections,
         forceStrength, setForceStrength,
         searchTerm, setSearchTerm,
+        isPlaying, setIsPlaying,
         selectedGroups, setSelectedGroups,
         selectedInteractionTypes, setSelectedInteractionTypes
     } = useControls();
@@ -21,8 +22,7 @@ const ControlsSidebar: React.FC = () => {
     const { bookId, chapterId } = useParams();
     const navigate = useNavigate();
 
-    // Auto-Play Logic
-    const [isPlaying, setIsPlaying] = useState(false);
+    // Auto-Play Logic — uses shared isPlaying/setIsPlaying from ControlsContext
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
@@ -58,6 +58,12 @@ const ControlsSidebar: React.FC = () => {
         return () => clearInterval(interval);
     }, [isPlaying, chapters, bookId, chapterId, navigate]);
 
+    // Helper to resolve a D3 link endpoint to a string id.
+    // After D3 runs its simulation it replaces source/target strings with
+    // full node objects — we must handle both forms.
+    const resolveId = (endpoint: any): string =>
+        typeof endpoint === 'object' && endpoint !== null ? endpoint.id : endpoint;
+
     // Helper to get interactions for selected node
     const getInteractions = () => {
         if (!selectedNode || !bookId || !chapterId || !data) return [];
@@ -65,11 +71,14 @@ const ControlsSidebar: React.FC = () => {
         const chapterData = data[dataKey];
         if (!chapterData) return [];
 
-        // Find links connected to selected node
-        return chapterData.links.filter(l => l.source === selectedNode.id || l.target === selectedNode.id)
+        // Find links connected to selected node, handling both string and object endpoints
+        return chapterData.links.filter(l =>
+            resolveId(l.source) === selectedNode.id || resolveId(l.target) === selectedNode.id
+        )
             .map(l => {
-                const otherId = l.source === selectedNode.id ? l.target : l.source;
-                // Find the other node object to get its group
+                const sourceId = resolveId(l.source);
+                const targetId = resolveId(l.target);
+                const otherId = sourceId === selectedNode.id ? targetId : sourceId;
                 const otherNode = chapterData.nodes.find(n => n.id === otherId);
                 return {
                     otherId,
@@ -78,7 +87,7 @@ const ControlsSidebar: React.FC = () => {
                     interactions: l.interactions
                 };
             })
-            .sort((a, b) => b.value - a.value); // Sort by strength
+            .sort((a, b) => b.value - a.value);
     };
 
     const nodeInteractions = getInteractions();

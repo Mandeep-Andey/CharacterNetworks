@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Paper, Text, Box } from '@mantine/core';
 import * as d3 from 'd3';
 import { Node, Link } from '../../context/DataContext';
 import { useSelection } from '../../context/SelectionContext';
 import { useControls } from '../../context/ControlsContext';
 import GraphBreadcrumbs from './GraphBreadcrumbs';
+import { debounce } from '../../utils/debounce';
 
 interface D3ForceGraphProps {
     nodes: Node[];
@@ -22,7 +23,8 @@ const COMMUNITY_COLORS = [
     '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000'
 ];
 
-
+/** Compute node radius from degree */
+const nodeRadius = (d: any) => (d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6);
 
 const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     nodes,
@@ -39,9 +41,13 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     const [tooltip, setTooltip] = useState<{ x: number, y: number, content: string } | null>(null);
     const [activeCommunity, setActiveCommunity] = useState<number | null>(null);
 
-    // Store zoom behavior to access it outside useEffect
+    // Persistent refs for zoom, container, and simulation
     const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
     const containerRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
+    const simulationRef = useRef<d3.Simulation<d3.SimulationNodeDatum, undefined> | null>(null);
+
+    // Debounce ref for hover cleanup
+    const debouncedHoverRef = useRef<ReturnType<typeof debounce> | null>(null);
 
     // Filter nodes and links based on minConnections
     const { filteredNodes, filteredLinks } = React.useMemo(() => {
@@ -52,6 +58,39 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         return { filteredNodes: activeNodes, filteredLinks: activeLinks };
     }, [nodes, links, minConnections]);
 
+    // ─── Backdrop Reset Callback ────────────────────────────────────────
+    const resetView = useCallback(() => {
+        setSelectedNode(null);
+        setActiveCommunity(null);
+        setTooltip(null);
+
+        // Smooth zoom reset to identity
+        if (svgRef.current && zoomRef.current) {
+            const svg = d3.select(svgRef.current);
+            svg.transition().duration(750).call(
+                zoomRef.current.transform as any,
+                d3.zoomIdentity
+            );
+        }
+    }, [setSelectedNode]);
+
+    // ─── Esc Key Handler (Simulation Auto-Pause + Reset) ────────────────
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                // Stop simulation
+                if (simulationRef.current) {
+                    simulationRef.current.stop();
+                }
+                // Also reset view
+                resetView();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [resetView]);
+
+    // ─── Main D3 Effect ─────────────────────────────────────────────────
     useEffect(() => {
         if (!svgRef.current || filteredNodes.length === 0) return;
 
@@ -61,9 +100,10 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         const container = svg.append("g");
         containerRef.current = container;
 
-        // Zoom behavior
+        // ── 3. Constrained Panning + Zoom ────────────────────────────
         const zoom = d3.zoom<SVGSVGElement, unknown>()
             .scaleExtent([0.1, 8])
+            .translateExtent([[-width, -height], [2 * width, 2 * height]])
             .on("zoom", (event) => {
                 container.attr("transform", event.transform);
             });
@@ -71,12 +111,11 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         zoomRef.current = zoom;
         svg.call(zoom);
 
-        // --- Community Centers Calculation ---
+        // ── Community Centers Calculation ─────────────────────────────
         const communities = Array.from(new Set(filteredNodes.map(d => d.community || 0)));
         const communityCount = communities.length;
         const communityCenters: { [key: number]: { x: number, y: number } } = {};
 
-        // Arrange communities in a circle
         const radius = Math.min(width, height) * 0.35;
         communities.forEach((c, i) => {
             const angle = (i / communityCount) * 2 * Math.PI;
@@ -86,161 +125,172 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             };
         });
 
-        // --- Force Simulation ---
+        // ── Force Simulation ─────────────────────────────────────────
+        const chargeStrength = -(forceStrength * 30);
         const simulation = d3.forceSimulation(filteredNodes as d3.SimulationNodeDatum[])
-            .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(80)) // Increased distance
-            .force("charge", d3.forceManyBody().strength(-300)) // Much stronger repulsion
-            .force("collide", d3.forceCollide().radius((d: any) => (d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6) + 15).iterations(2)); // More padding
+            .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(80))
+            .force("charge", d3.forceManyBody().strength(chargeStrength))
+            .force("collide", d3.forceCollide().radius((d: any) => nodeRadius(d) + 15).iterations(2))
+            .force("x", d3.forceX((d: any) => communityCenters[d.community || 0]?.x || width / 2).strength(0.08))
+            .force("y", d3.forceY((d: any) => communityCenters[d.community || 0]?.y || height / 2).strength(0.08));
 
-        // ALWAYS use segregated view forces but with much gentler pull
-        simulation.force("x", d3.forceX((d: any) => communityCenters[d.community || 0]?.x || width / 2).strength(0.08)); // Reduced from 0.3
-        simulation.force("y", d3.forceY((d: any) => communityCenters[d.community || 0]?.y || height / 2).strength(0.08)); // Reduced from 0.3
+        simulationRef.current = simulation;
 
-        // --- Rendering ---
+        // ── 4. Simulation Auto-Pause on settle ───────────────────────
+        simulation.on("end", () => {
+            simulation.stop();
+        });
 
-        // Render links
-        const link = container.append("g")
+        // ── Rendering: Links ─────────────────────────────────────────
+        const linkGroup = container.append("g")
             .attr("stroke", "#999")
-            .attr("stroke-opacity", 0.6)
-            .selectAll("line")
+            .attr("stroke-opacity", 0.6);
+
+        const link = linkGroup.selectAll("line")
             .data(filteredLinks)
-            .join("line")
-            .attr("stroke-width", (d) => Math.sqrt(d.value) * 1.5)
-            .attr("stroke", (d) => {
-                if (selectedNode && (d.source === selectedNode.id || d.target === selectedNode.id ||
-                    (d.source as any).id === selectedNode.id || (d.target as any).id === selectedNode.id)) {
-                    return "#e74c3c";
-                }
-                return "#bdc3c7";
-            })
-            .attr("opacity", (d) => {
-                const sourceNode = filteredNodes.find(n => n.id === (typeof d.source === 'object' ? (d.source as any).id : d.source));
-                const targetNode = filteredNodes.find(n => n.id === (typeof d.target === 'object' ? (d.target as any).id : d.target));
+            .join(
+                enter => enter.append("line")
+                    .attr("stroke-width", (d) => Math.sqrt(d.value) * 1.5)
+                    .attr("stroke", (d) => {
+                        if (selectedNode && (d.source === selectedNode.id || d.target === selectedNode.id ||
+                            (d.source as any).id === selectedNode.id || (d.target as any).id === selectedNode.id)) {
+                            return "#e74c3c";
+                        }
+                        return "#bdc3c7";
+                    })
+                    .attr("opacity", 0)
+                    .call(sel => sel.transition().duration(400).attr("opacity", (d: any) => {
+                        const sourceNode = filteredNodes.find(n => n.id === (typeof d.source === 'object' ? (d.source as any).id : d.source));
+                        const targetNode = filteredNodes.find(n => n.id === (typeof d.target === 'object' ? (d.target as any).id : d.target));
+                        if (sourceNode?.community !== targetNode?.community) return 0.2;
+                        return 0.6;
+                    })),
+                update => update,
+                exit => exit.transition().duration(400).attr("opacity", 0).remove()
+            );
 
-                // Dim cross-community links slightly
-                if (sourceNode?.community !== targetNode?.community) return 0.2;
-                return 0.6;
-            });
-
-        // Render nodes
-        const node = container.append("g")
+        // ── Rendering: Nodes ─────────────────────────────────────────
+        const nodeGroup = container.append("g")
             .attr("stroke", "#fff")
-            .attr("stroke-width", 1.5)
-            .selectAll("circle")
-            .data(filteredNodes)
-            .join("circle")
-            .attr("r", (d) => d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6)
-            .attr("fill", (d) => {
-                const baseColor = COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length];
+            .attr("stroke-width", 1.5);
 
-                // If a community is active and this node belongs to it, use a gradient palette
-                if (activeCommunity !== null && d.community === activeCommunity) {
-                    // Create a dynamic scale based on the community's base color
-                    // We want a range from a lighter version to a darker version of the base color
-                    const color = d3.color(baseColor);
-                    if (color) {
-                        const interpolator = d3.interpolateRgb(
-                            color.brighter(1.5).formatHex(), // Lighter for low degree
-                            color.darker(2).formatHex()      // Darker for high degree
-                        );
-                        // Map degree 0-20 to the color scale
-                        // We clamp the input to 0-1 range for the interpolator
-                        const t = Math.min(Math.max((d.degree || 0) / 25, 0), 1);
-                        return interpolator(t);
-                    }
-                }
-                return baseColor;
-            })
-            .attr("opacity", (d) => {
-                if (activeCommunity !== null && d.community !== activeCommunity) return 0.1;
+        // ── 5. Debounced Hover ────────────────────────────────────────
+        const debouncedShowTooltip = debounce((event: MouseEvent, d: any) => {
+            setTooltip({
+                x: event.clientX,
+                y: event.clientY,
+                content: `${d.id} (Group ${d.community})`
+            });
+            d3.select(event.currentTarget as Element)
+                .attr("stroke", "#333")
+                .attr("stroke-width", 3)
+                .transition().duration(200)
+                .attr("r", nodeRadius(d) + 3);
+        }, 120);
+        debouncedHoverRef.current = debouncedShowTooltip;
 
-                if (searchTerm && !d.id.toLowerCase().includes(searchTerm.toLowerCase())) {
-                    return 0.1;
-                }
-                if (selectedNode) {
-                    const isConnected = filteredLinks.some(l =>
-                        (l.source === selectedNode.id && l.target === d.id) ||
-                        (l.target === selectedNode.id && l.source === d.id) ||
-                        ((l.source as any).id === selectedNode.id && (l.target as any).id === d.id) ||
-                        ((l.target as any).id === selectedNode.id && (l.source as any).id === d.id)
-                    );
-                    if (d.id !== selectedNode.id && !isConnected) {
-                        return 0.1;
-                    }
-                }
-                return 1;
-            })
-            .attr("cursor", "pointer")
+        // ── 6. Smooth Chapter Transitions (.join lifecycle) ──────────
+        const node = nodeGroup.selectAll<SVGCircleElement, Node>("circle")
+            .data(filteredNodes, (d: any) => d.id)
+            .join(
+                enter => enter.append("circle")
+                    .attr("r", 0)
+                    .attr("opacity", 0)
+                    .attr("fill", (d) => {
+                        const baseColor = COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length];
+                        if (activeCommunity !== null && d.community === activeCommunity) {
+                            const color = d3.color(baseColor);
+                            if (color) {
+                                const interpolator = d3.interpolateRgb(
+                                    color.brighter(1.5).formatHex(),
+                                    color.darker(2).formatHex()
+                                );
+                                const t = Math.min(Math.max((d.degree || 0) / 25, 0), 1);
+                                return interpolator(t);
+                            }
+                        }
+                        return baseColor;
+                    })
+                    .attr("cursor", "pointer")
+                    .call(sel => sel.transition().duration(500)
+                        .attr("r", (d: any) => nodeRadius(d))
+                        .attr("opacity", (d: any) => computeNodeOpacity(d, activeCommunity, searchTerm, selectedNode, filteredLinks))
+                    ),
+                update => update.call(sel => sel.transition().duration(400)
+                    .attr("opacity", (d: any) => computeNodeOpacity(d, activeCommunity, searchTerm, selectedNode, filteredLinks))
+                ),
+                exit => exit.transition().duration(400)
+                    .attr("r", 0)
+                    .attr("opacity", 0)
+                    .remove()
+            )
             .on("click", (event, d) => {
                 event.stopPropagation();
                 if (activeCommunity === null || activeCommunity !== d.community) {
                     setActiveCommunity(d.community || 0);
                 }
-                // ALWAYS select the node, even if we just zoomed in
                 setSelectedNode(d as Node);
             })
             .on("mouseover", (event, d) => {
-                setTooltip({
-                    x: event.clientX,
-                    y: event.clientY,
-                    content: `${d.id} (Group ${d.community})`
-                });
-                d3.select(event.currentTarget)
-                    .attr("stroke", "#333")
-                    .attr("stroke-width", 3)
-                    .transition().duration(200)
-                    .attr("r", (d: any) => (d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6) + 3);
+                debouncedShowTooltip(event, d);
             })
             .on("mousemove", (event) => {
                 setTooltip(prev => prev ? { ...prev, x: event.pageX, y: event.pageY } : null);
             })
-            .on("mouseout", (event) => {
+            .on("mouseout", (event, d) => {
+                // Cancel pending debounce and immediately hide
+                debouncedShowTooltip.cancel();
                 setTooltip(null);
                 d3.select(event.currentTarget)
                     .attr("stroke", "#fff")
                     .attr("stroke-width", 1.5)
                     .transition().duration(200)
-                    .attr("r", (d: any) => d.degree ? Math.sqrt(d.degree) * 4 + 4 : 6);
+                    .attr("r", nodeRadius(d));
+            })
+            // ── 2. Sticky Drag Pinning: dblclick to release ──────────
+            .on("dblclick", (event, d: any) => {
+                event.stopPropagation();
+                d.fx = null;
+                d.fy = null;
+                simulation.alphaTarget(0.3).restart();
+                setTimeout(() => simulation.alphaTarget(0), 1000);
             })
             .call(drag(simulation) as any);
 
-        // Background click to clear selection / zoom out
-        svg.on("click", () => {
-            if (selectedNode) {
-                setSelectedNode(null);
+        // ── 1. Backdrop Reset (background click) ─────────────────────
+        svg.on("click", (event) => {
+            // Only fire if click was directly on the SVG background
+            if (event.target === svgRef.current) {
+                resetView();
             }
         });
 
-        // Add labels
-        const label = container.append("g")
-            .attr("class", "labels")
-            .selectAll("text")
-            .data(filteredNodes)
-            .join("text")
-            .attr("dx", 12)
-            .attr("dy", ".35em")
-            .text((d) => d.id)
-            .style("font-family", "var(--mantine-font-family)")
-            .style("font-size", "12px")
-            .style("font-weight", "600")
-            .style("pointer-events", "none")
-            .style("text-shadow", "1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white")
-            .style("opacity", (d) => {
-                if (activeCommunity !== null && d.community !== activeCommunity) return 0;
-                if (selectedNode) {
-                    const isConnected = filteredLinks.some(l =>
-                        (l.source === selectedNode.id && l.target === d.id) ||
-                        (l.target === selectedNode.id && l.source === d.id) ||
-                        ((l.source as any).id === selectedNode.id && (l.target as any).id === d.id) ||
-                        ((l.target as any).id === selectedNode.id && (l.source as any).id === d.id)
-                    );
-                    if (d.id === selectedNode.id || isConnected) return 1;
-                    return 0;
-                }
-                return (d.degree || 0) > 5 ? 1 : 0;
-            });
+        // ── Labels ───────────────────────────────────────────────────
+        const labelGroup = container.append("g").attr("class", "labels");
 
-        // Simulation tick
+        const label = labelGroup.selectAll<SVGTextElement, Node>("text")
+            .data(filteredNodes, (d: any) => d.id)
+            .join(
+                enter => enter.append("text")
+                    .attr("dx", 12)
+                    .attr("dy", ".35em")
+                    .text((d) => d.id)
+                    .style("font-family", "var(--mantine-font-family)")
+                    .style("font-size", "12px")
+                    .style("font-weight", "600")
+                    .style("pointer-events", "none")
+                    .style("text-shadow", "1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white")
+                    .attr("opacity", 0)
+                    .call(sel => sel.transition().duration(500)
+                        .attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks))
+                    ),
+                update => update.call(sel => sel.transition().duration(400)
+                    .attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks))
+                ),
+                exit => exit.transition().duration(400).attr("opacity", 0).remove()
+            );
+
+        // ── Simulation Tick ──────────────────────────────────────────
         simulation.on("tick", () => {
             link
                 .attr("x1", (d: any) => d.source.x)
@@ -257,7 +307,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 .attr("y", (d: any) => d.y);
         });
 
-        // Drag behavior
+        // ── 2. Sticky Drag Pinning ──────────────────────────────────
         function drag(simulation: d3.Simulation<d3.SimulationNodeDatum, undefined>) {
             function dragstarted(event: any) {
                 if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -270,10 +320,11 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 event.subject.fy = event.y;
             }
 
+            // Keep fx/fy set so the node stays pinned where it was dropped
             function dragended(event: any) {
                 if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
+                // Sticky: do NOT reset fx/fy — node stays pinned
+                // User can double-click to release
             }
 
             return d3.drag()
@@ -282,22 +333,25 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 .on("end", dragended);
         }
 
+        // ── Cleanup ──────────────────────────────────────────────────
         return () => {
             simulation.stop();
+            simulationRef.current = null;
+            if (debouncedHoverRef.current) {
+                debouncedHoverRef.current.cancel();
+            }
         };
-    }, [filteredNodes, filteredLinks, width, height, forceStrength, searchTerm, selectedNode, setSelectedNode, activeCommunity]);
+    }, [filteredNodes, filteredLinks, width, height, forceStrength, searchTerm, selectedNode, setSelectedNode, activeCommunity, resetView]);
 
-    // Handle Zoom to Community Effect
+    // ─── Handle Zoom to Community Effect ────────────────────────────────
     useEffect(() => {
         if (!svgRef.current || !zoomRef.current) return;
         const svg = d3.select(svgRef.current);
 
         if (activeCommunity !== null) {
-            // Find nodes in this community
             const communityNodes = filteredNodes.filter(n => n.community === activeCommunity);
             if (communityNodes.length === 0) return;
 
-            // Calculate bounding box
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             communityNodes.forEach((n: any) => {
                 if (n.x === undefined || n.y === undefined) return;
@@ -307,17 +361,14 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 maxY = Math.max(maxY, n.y);
             });
 
-            // Add padding
             const padding = 50;
             const boxWidth = maxX - minX + padding * 2;
             const boxHeight = maxY - minY + padding * 2;
             const centerX = (minX + maxX) / 2;
             const centerY = (minY + maxY) / 2;
 
-            // Calculate scale
             const scale = Math.min(8, 0.9 / Math.max(boxWidth / width, boxHeight / height));
 
-            // Transition
             svg.transition().duration(750).call(
                 zoomRef.current.transform as any,
                 d3.zoomIdentity
@@ -325,17 +376,13 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                     .scale(scale)
                     .translate(-centerX, -centerY)
             );
-
         } else {
-            // Reset to global view
             svg.transition().duration(750).call(
                 zoomRef.current.transform as any,
                 d3.zoomIdentity
             );
         }
-
     }, [activeCommunity, filteredNodes, width, height]);
-
 
     return (
         <Box w="100%" h="100%" pos="relative" bg="transparent">
@@ -392,5 +439,48 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         </Box>
     );
 };
+
+// ─── Helper: compute node opacity ─────────────────────────────────────
+function computeNodeOpacity(
+    d: any,
+    activeCommunity: number | null,
+    searchTerm: string,
+    selectedNode: Node | null,
+    filteredLinks: Link[]
+): number {
+    if (activeCommunity !== null && d.community !== activeCommunity) return 0.1;
+    if (searchTerm && !d.id.toLowerCase().includes(searchTerm.toLowerCase())) return 0.1;
+    if (selectedNode) {
+        const isConnected = filteredLinks.some(l =>
+            (l.source === selectedNode.id && l.target === d.id) ||
+            (l.target === selectedNode.id && l.source === d.id) ||
+            ((l.source as any).id === selectedNode.id && (l.target as any).id === d.id) ||
+            ((l.target as any).id === selectedNode.id && (l.source as any).id === d.id)
+        );
+        if (d.id !== selectedNode.id && !isConnected) return 0.1;
+    }
+    return 1;
+}
+
+// ─── Helper: compute label opacity ────────────────────────────────────
+function computeLabelOpacity(
+    d: any,
+    activeCommunity: number | null,
+    selectedNode: Node | null,
+    filteredLinks: Link[]
+): number {
+    if (activeCommunity !== null && d.community !== activeCommunity) return 0;
+    if (selectedNode) {
+        const isConnected = filteredLinks.some(l =>
+            (l.source === selectedNode.id && l.target === d.id) ||
+            (l.target === selectedNode.id && l.source === d.id) ||
+            ((l.source as any).id === selectedNode.id && (l.target as any).id === d.id) ||
+            ((l.target as any).id === selectedNode.id && (l.source as any).id === d.id)
+        );
+        if (d.id === selectedNode.id || isConnected) return 1;
+        return 0;
+    }
+    return (d.degree || 0) > 5 ? 1 : 0;
+}
 
 export default D3ForceGraph;
