@@ -41,10 +41,10 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     const [tooltip, setTooltip] = useState<{ x: number, y: number, content: string } | null>(null);
     const [activeCommunity, setActiveCommunity] = useState<number | null>(null);
 
-    // Persistent refs for zoom, container, and simulation
+    // Persistent refs for elements and states
     const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
-    const containerRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
     const simulationRef = useRef<d3.Simulation<d3.SimulationNodeDatum, undefined> | null>(null);
+    const previousNodesRef = useRef<Map<string, any>>(new Map());
 
     // Debounce ref for hover cleanup
     const debouncedHoverRef = useRef<ReturnType<typeof debounce> | null>(null);
@@ -78,11 +78,9 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                // Stop simulation
                 if (simulationRef.current) {
                     simulationRef.current.stop();
                 }
-                // Also reset view
                 resetView();
             }
         };
@@ -95,21 +93,40 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         if (!svgRef.current || filteredNodes.length === 0) return;
 
         const svg = d3.select(svgRef.current);
-        svg.selectAll("*").remove(); // Clear previous render
 
-        const container = svg.append("g");
-        containerRef.current = container;
+        // ── Initialization of SVG Layers (Done Once) ─────────────────
+        let container = svg.select<SVGGElement>("g.graph-container");
+        if (container.empty()) {
+            container = svg.append("g").attr("class", "graph-container");
 
-        // ── 3. Constrained Panning + Zoom ────────────────────────────
-        const zoom = d3.zoom<SVGSVGElement, unknown>()
-            .scaleExtent([0.1, 8])
-            .translateExtent([[-width, -height], [2 * width, 2 * height]])
-            .on("zoom", (event) => {
-                container.attr("transform", event.transform);
+            // Attach structural groups so they stay in order
+            container.append("g").attr("class", "link-group").attr("stroke", "#999").attr("stroke-opacity", 0.6);
+            container.append("g").attr("class", "node-group").attr("stroke", "#fff").attr("stroke-width", 1.5);
+            container.append("g").attr("class", "label-group");
+
+            // ── 3. Constrained Panning + Zoom ────────────────────────────
+            const zoom = d3.zoom<SVGSVGElement, unknown>()
+                .scaleExtent([0.1, 8])
+                .translateExtent([[-width / 2, -height / 2], [width * 1.5, height * 1.5]]) // Allow dragging canvas but don't lose graph
+                .on("zoom", (event) => {
+                    container.attr("transform", event.transform);
+                });
+
+            zoomRef.current = zoom;
+            svg.call(zoom);
+
+            // ── 1. Backdrop Reset ─────────────────────────────────────────
+            svg.on("click", (event) => {
+                if (event.target === svgRef.current) {
+                    resetView();
+                }
             });
-
-        zoomRef.current = zoom;
-        svg.call(zoom);
+        } else {
+            // If width/height changes, update zoom extent
+            if (zoomRef.current) {
+               zoomRef.current.translateExtent([[-width / 2, -height / 2], [width * 1.5, height * 1.5]]);
+            }
+        }
 
         // ── Community Centers Calculation ─────────────────────────────
         const communities = Array.from(new Set(filteredNodes.map(d => d.community || 0)));
@@ -125,12 +142,32 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             };
         });
 
+        // ── Preserve Node Positions ──────────────────────────────────
+        filteredNodes.forEach((node: any) => {
+            const prev = previousNodesRef.current.get(node.id);
+            if (prev) {
+                // carry over physics state to prevent jarring snaps
+                node.x = prev.x;
+                node.y = prev.y;
+                node.vx = prev.vx;
+                node.vy = prev.vy;
+                node.fx = prev.fx;
+                node.fy = prev.fy;
+            } else {
+                // start new nodes near their community
+                const c = communityCenters[node.community || 0];
+                node.x = c ? c.x : width / 2;
+                node.y = c ? c.y : height / 2;
+            }
+        });
+
         // ── Force Simulation ─────────────────────────────────────────
         const chargeStrength = -(forceStrength * 30);
         const simulation = d3.forceSimulation(filteredNodes as d3.SimulationNodeDatum[])
             .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(80))
             .force("charge", d3.forceManyBody().strength(chargeStrength))
             .force("collide", d3.forceCollide().radius((d: any) => nodeRadius(d) + 15).iterations(2))
+            .force("center", d3.forceCenter(width / 2, height / 2)) // Precisely center the network to canvas
             .force("x", d3.forceX((d: any) => communityCenters[d.community || 0]?.x || width / 2).strength(0.08))
             .force("y", d3.forceY((d: any) => communityCenters[d.community || 0]?.y || height / 2).strength(0.08));
 
@@ -142,12 +179,13 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         });
 
         // ── Rendering: Links ─────────────────────────────────────────
-        const linkGroup = container.append("g")
-            .attr("stroke", "#999")
-            .attr("stroke-opacity", 0.6);
-
-        const link = linkGroup.selectAll("line")
-            .data(filteredLinks)
+        const linkGroup = container.select("g.link-group");
+        const link = linkGroup.selectAll<SVGLineElement, Link>("line")
+            .data(filteredLinks, (d: any) => {
+                const sId = typeof d.source === 'object' ? d.source.id : d.source;
+                const tId = typeof d.target === 'object' ? d.target.id : d.target;
+                return `${sId}-${tId}`;
+            })
             .join(
                 enter => enter.append("line")
                     .attr("stroke-width", (d) => Math.sqrt(d.value) * 1.5)
@@ -170,9 +208,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             );
 
         // ── Rendering: Nodes ─────────────────────────────────────────
-        const nodeGroup = container.append("g")
-            .attr("stroke", "#fff")
-            .attr("stroke-width", 1.5);
+        const nodeGroup = container.select("g.node-group");
 
         // ── 5. Debounced Hover ────────────────────────────────────────
         const debouncedShowTooltip = debounce((event: MouseEvent, d: any) => {
@@ -257,16 +293,8 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             })
             .call(drag(simulation) as any);
 
-        // ── 1. Backdrop Reset (background click) ─────────────────────
-        svg.on("click", (event) => {
-            // Only fire if click was directly on the SVG background
-            if (event.target === svgRef.current) {
-                resetView();
-            }
-        });
-
         // ── Labels ───────────────────────────────────────────────────
-        const labelGroup = container.append("g").attr("class", "labels");
+        const labelGroup = container.select("g.label-group");
 
         const label = labelGroup.selectAll<SVGTextElement, Node>("text")
             .data(filteredNodes, (d: any) => d.id)
@@ -324,7 +352,6 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             function dragended(event: any) {
                 if (!event.active) simulation.alphaTarget(0);
                 // Sticky: do NOT reset fx/fy — node stays pinned
-                // User can double-click to release
             }
 
             return d3.drag()
@@ -335,6 +362,11 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
 
         // ── Cleanup ──────────────────────────────────────────────────
         return () => {
+            // Save current positions for smooth transition to next chapter
+            filteredNodes.forEach((n: any) => {
+                previousNodesRef.current.set(n.id, { x: n.x, y: n.y, vx: n.vx, vy: n.vy, fx: n.fx, fy: n.fy });
+            });
+
             simulation.stop();
             simulationRef.current = null;
             if (debouncedHoverRef.current) {
