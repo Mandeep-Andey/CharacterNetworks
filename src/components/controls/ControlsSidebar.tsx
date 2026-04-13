@@ -263,16 +263,7 @@ const ControlsSidebar: React.FC = () => {
                                                     if (!checked) {
                                                         setSelectedInteractionTypes(availableInteractionTypes.filter(t => t !== type));
                                                     } else {
-                                                        // If currently "all" and we check one... wait, logic for "all" is empty array.
-                                                        // If we are starting from empty (all), clicking one usually means "only this one" or "toggle this one"?
-                                                        // Let's stick to: Empty = All.
-                                                        // If user clicks a checkbox when Empty:
-                                                        // It's ambiguous. Let's assume standard filter behavior:
-                                                        // If Empty, and user clicks one, it becomes [type] (only that one).
-                                                        // But here we are rendering checkboxes as "checked".
-                                                        // So if it's checked (because Empty=All), and user clicks it to uncheck...
-                                                        // Then we want everything EXCEPT this one.
-                                                        setSelectedInteractionTypes(availableInteractionTypes.filter(t => t !== type));
+                                                        setSelectedInteractionTypes([type]);
                                                     }
                                                 } else {
                                                     if (checked) {

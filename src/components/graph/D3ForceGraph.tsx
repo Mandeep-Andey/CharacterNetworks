@@ -45,18 +45,14 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
     const simulationRef = useRef<d3.Simulation<d3.SimulationNodeDatum, undefined> | null>(null);
     const previousNodesRef = useRef<Map<string, any>>(new Map());
+    const zoomScaleRef = useRef<number>(1);
 
     // Debounce ref for hover cleanup
     const debouncedHoverRef = useRef<ReturnType<typeof debounce> | null>(null);
 
     // Filter nodes and links based on minConnections
-    const { filteredNodes, filteredLinks } = React.useMemo(() => {
-        const activeNodes = nodes.filter(n => (n.degree || 0) >= minConnections);
-        const activeNodeIds = new Set(activeNodes.map(n => n.id));
-        const activeLinks = links.filter(l => activeNodeIds.has(l.source) && activeNodeIds.has(l.target));
-
-        return { filteredNodes: activeNodes, filteredLinks: activeLinks };
-    }, [nodes, links, minConnections]);
+    const filteredNodes = nodes;
+    const filteredLinks = links;
 
     // ─── Backdrop Reset Callback ────────────────────────────────────────
     const resetView = useCallback(() => {
@@ -88,8 +84,21 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [resetView]);
 
+    // ─── Validate Selection ─────────────────────────────────────────────
+    useEffect(() => {
+        if (selectedNode) {
+            const nodeExists = filteredNodes.some(n => n.id === selectedNode.id);
+            if (!nodeExists) {
+                // Node no longer in current chapter's graph
+                setSelectedNode(null);
+                setActiveCommunity(null);
+            }
+        }
+    }, [filteredNodes, selectedNode, setSelectedNode]);
+
     // ─── Main D3 Effect ─────────────────────────────────────────────────
     useEffect(() => {
+        console.log('D3ForceGraph Effect Ran');
         if (!svgRef.current || filteredNodes.length === 0) return;
 
         const svg = d3.select(svgRef.current);
@@ -107,10 +116,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             // ── 3. Constrained Panning + Zoom ────────────────────────────
             const zoom = d3.zoom<SVGSVGElement, unknown>()
                 .scaleExtent([0.1, 8])
-                .translateExtent([[-width / 2, -height / 2], [width * 1.5, height * 1.5]]) // Allow dragging canvas but don't lose graph
-                .on("zoom", (event) => {
-                    container.attr("transform", event.transform);
-                });
+                .translateExtent([[-width / 2, -height / 2], [width * 1.5, height * 1.5]]); // Allow dragging canvas but don't lose graph
 
             zoomRef.current = zoom;
             svg.call(zoom);
@@ -126,6 +132,21 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             if (zoomRef.current) {
                zoomRef.current.translateExtent([[-width / 2, -height / 2], [width * 1.5, height * 1.5]]);
             }
+        }
+
+        // ── Zoom Handler (Dynamic) ───────────────────────────────────
+        if (zoomRef.current) {
+            zoomRef.current.on("zoom", (event) => {
+                zoomScaleRef.current = event.transform.k;
+                container.attr("transform", event.transform);
+                
+                const k = event.transform.k;
+                const fontSize = k < 1 ? 12 : Math.max(9, 12 / Math.pow(k, 0.6));
+                
+                container.select(".label-group").selectAll<SVGTextElement, Node>("text:not(.exiting)")
+                    .style("font-size", `${fontSize}px`)
+                    .attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks, k));
+            });
         }
 
         // ── Community Centers Calculation ─────────────────────────────
@@ -204,7 +225,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                         return 0.6;
                     })),
                 update => update,
-                exit => exit.transition().duration(400).attr("opacity", 0).remove()
+                exit => exit.call(e => e.classed("exiting", true).transition().duration(400).attr("opacity", 0).remove())
             );
 
         // ── Rendering: Nodes ─────────────────────────────────────────
@@ -250,15 +271,11 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                     .attr("cursor", "pointer")
                     .call(sel => sel.transition().duration(500)
                         .attr("r", (d: any) => nodeRadius(d))
-                        .attr("opacity", (d: any) => computeNodeOpacity(d, activeCommunity, searchTerm, selectedNode, filteredLinks))
                     ),
                 update => update.call(sel => sel.transition().duration(400)
-                    .attr("opacity", (d: any) => computeNodeOpacity(d, activeCommunity, searchTerm, selectedNode, filteredLinks))
+                    .attr("r", (d: any) => nodeRadius(d))
                 ),
-                exit => exit.transition().duration(400)
-                    .attr("r", 0)
-                    .attr("opacity", 0)
-                    .remove()
+                exit => exit.call(e => e.classed("exiting", true).transition().duration(400).attr("opacity", 0).remove())
             )
             .on("click", (event, d) => {
                 event.stopPropagation();
@@ -304,18 +321,18 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                     .attr("dy", ".35em")
                     .text((d) => d.id)
                     .style("font-family", "var(--mantine-font-family)")
-                    .style("font-size", "12px")
+                    .style("font-size", () => `${zoomScaleRef.current < 1 ? 12 : Math.max(9, 12 / Math.pow(zoomScaleRef.current, 0.6))}px`)
                     .style("font-weight", "600")
                     .style("pointer-events", "none")
                     .style("text-shadow", "1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white")
                     .attr("opacity", 0)
                     .call(sel => sel.transition().duration(500)
-                        .attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks))
+                        .attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks, zoomScaleRef.current))
                     ),
                 update => update.call(sel => sel.transition().duration(400)
-                    .attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks))
+                    .attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks, zoomScaleRef.current))
                 ),
-                exit => exit.transition().duration(400).attr("opacity", 0).remove()
+                exit => exit.call(e => e.classed("exiting", true).transition().duration(400).attr("opacity", 0).remove())
             );
 
         // ── Simulation Tick ──────────────────────────────────────────
@@ -373,7 +390,53 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 debouncedHoverRef.current.cancel();
             }
         };
-    }, [filteredNodes, filteredLinks, width, height, forceStrength, searchTerm, selectedNode, setSelectedNode, activeCommunity, resetView]);
+    }, [filteredNodes, filteredLinks, width, height, forceStrength, setSelectedNode, resetView]);
+
+    // ─── Dynamic Opacity & Selection Updates ──────────────────────────
+    useEffect(() => {
+        if (!svgRef.current) return;
+        const svg = d3.select(svgRef.current);
+        
+        svg.selectAll<SVGCircleElement, any>("g.node-group circle:not(.exiting)")
+            .transition("visuals").duration(400)
+            .attr("opacity", (d) => computeNodeOpacity(d, activeCommunity, searchTerm, selectedNode, filteredLinks))
+            .attr("fill", (d) => {
+                const baseColor = COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length];
+                if (activeCommunity !== null && d.community === activeCommunity) {
+                    const color = d3.color(baseColor);
+                    if (color) {
+                        const interpolator = d3.interpolateRgb(
+                            color.brighter(1.5).formatHex(),
+                            color.darker(2).formatHex()
+                        );
+                        const t = Math.min(Math.max((d.degree || 0) / 25, 0), 1);
+                        return interpolator(t);
+                    }
+                }
+                return baseColor;
+            });
+
+        svg.selectAll<SVGLineElement, any>("g.link-group line:not(.exiting)")
+            .transition("visuals").duration(400)
+            .attr("stroke", (d) => {
+                if (selectedNode && (d.source === selectedNode.id || d.target === selectedNode.id ||
+                    (d.source as any).id === selectedNode.id || (d.target as any).id === selectedNode.id)) {
+                    return "#e74c3c";
+                }
+                return "#bdc3c7";
+            })
+            .attr("opacity", (d: any) => {
+                const sourceNode = filteredNodes.find(n => n.id === (typeof d.source === 'object' ? (d.source as any).id : d.source));
+                const targetNode = filteredNodes.find(n => n.id === (typeof d.target === 'object' ? (d.target as any).id : d.target));
+                if (sourceNode?.community !== targetNode?.community) return 0.2;
+                return 0.6;
+            });
+
+        svg.selectAll<SVGTextElement, any>("g.label-group text:not(.exiting)")
+            .transition("visuals").duration(400)
+            .attr("opacity", (d) => computeLabelOpacity(d, activeCommunity, selectedNode, filteredLinks, zoomScaleRef.current));
+
+    }, [activeCommunity, searchTerm, selectedNode, filteredLinks, filteredNodes]);
 
     // ─── Handle Zoom to Community Effect ────────────────────────────────
     useEffect(() => {
@@ -382,7 +445,14 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
 
         if (activeCommunity !== null) {
             const communityNodes = filteredNodes.filter(n => n.community === activeCommunity);
-            if (communityNodes.length === 0) return;
+            if (communityNodes.length === 0) {
+                // If community is no longer in view, reset zoom
+                svg.transition().duration(750).call(
+                    zoomRef.current.transform as any,
+                    d3.zoomIdentity
+                );
+                return;
+            }
 
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             communityNodes.forEach((n: any) => {
@@ -499,7 +569,8 @@ function computeLabelOpacity(
     d: any,
     activeCommunity: number | null,
     selectedNode: Node | null,
-    filteredLinks: Link[]
+    filteredLinks: Link[],
+    zoomScale: number
 ): number {
     if (activeCommunity !== null && d.community !== activeCommunity) return 0;
     if (selectedNode) {
@@ -511,6 +582,13 @@ function computeLabelOpacity(
         );
         if (d.id === selectedNode.id || isConnected) return 1;
         return 0;
+    }
+    
+    // Semantic zoom:
+    // If zoomed in (k > 1.3), show ALL node labels.
+    // If zoomed out, only show prominent nodes (degree > 5).
+    if (zoomScale > 1.3) {
+        return 1;
     }
     return (d.degree || 0) > 5 ? 1 : 0;
 }

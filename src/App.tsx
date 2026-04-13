@@ -1,3 +1,4 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { DataProvider, useData } from './context/DataContext';
 import MainLayout from './components/layout/MainLayout';
@@ -8,7 +9,7 @@ import { Center, Text, Box, Paper } from '@mantine/core';
 const GraphView = () => {
   const { bookId, chapterId } = useParams();
   const { data, loading } = useData();
-  const { selectedGroups, selectedInteractionTypes } = useControls();
+  const { selectedGroups, selectedInteractionTypes, minConnections, forceStrength } = useControls();
 
   if (loading || !data) {
     return <Center h="100%"><Text c="dimmed">Loading graph data...</Text></Center>;
@@ -27,25 +28,26 @@ const GraphView = () => {
     );
   }
 
-  // Apply filters
-  // 1. Filter Nodes by Group
-  const filteredNodes = chapterData.nodes.filter(node => {
-    if (selectedGroups.length === 0) return true; // No filter = show all
-    return selectedGroups.includes(node.groupName || 'Unknown');
-  });
+  const { graphNodes, graphLinks } = React.useMemo(() => {
+    const fNodes = chapterData.nodes.filter(node => {
+      if ((node.degree || 0) < minConnections) return false;
+      if (selectedGroups.length === 0) return true;
+      return selectedGroups.includes(node.groupName || 'Unknown');
+    });
 
-  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+    const filteredNodeIds = new Set(fNodes.map(n => n.id));
 
-  // 2. Filter Links by Interaction Type AND ensure both ends are in filtered nodes
-  const filteredLinks = chapterData.links.filter(link => {
-    // Check if both source and target are in filtered nodes
-    if (!filteredNodeIds.has(link.source) || !filteredNodeIds.has(link.target)) return false;
+    const fLinks = chapterData.links.filter(link => {
+      if (!filteredNodeIds.has(link.source) || !filteredNodeIds.has(link.target)) return false;
+      if (selectedInteractionTypes.length === 0) return true;
+      return link.interactions.some(i => selectedInteractionTypes.includes(i.type));
+    });
 
-    // Check interaction types
-    if (selectedInteractionTypes.length === 0) return true;
-    // Link must have at least one interaction of a selected type
-    return link.interactions.some(i => selectedInteractionTypes.includes(i.type));
-  });
+    return {
+      graphNodes: fNodes.map(n => ({ ...n })),
+      graphLinks: fLinks.map(l => ({ ...l }))
+    };
+  }, [chapterData, minConnections, selectedGroups, selectedInteractionTypes]);
 
   return (
     <Box w="100%" h="100%" bg="gray.0" pos="relative">
@@ -71,8 +73,9 @@ const GraphView = () => {
         </Text>
       </Paper>
       <D3ForceGraph
-        nodes={filteredNodes.map(n => ({ ...n }))}
-        links={filteredLinks.map(l => ({ ...l }))}
+        nodes={graphNodes}
+        links={graphLinks}
+        forceStrength={forceStrength}
       />
     </Box>
   );
