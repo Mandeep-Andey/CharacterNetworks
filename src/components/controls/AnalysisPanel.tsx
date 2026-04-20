@@ -92,7 +92,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ nodes, links }) => {
                             <Badge size="sm" circle variant="filled" color="gray">{idx + 1}</Badge>
                             <Text size="sm" fw={500} truncate>{node.id}</Text>
                         </Group>
-                        <Badge variant="light" color="primary">
+                        <Badge variant="light" color="primary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
                             {node.degree} conn
                         </Badge>
                     </Group>

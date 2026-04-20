@@ -25,16 +25,16 @@ const SiteHeader: React.FC = () => {
         </Text>
       </Modal>
 
-      <Box component="header" bg="primary.7" c="white" style={{ borderBottom: '4px solid var(--mantine-color-accent-5)', height: '100%' }}>
+      <Box component="header" bg="white" c="dark.9" style={{ borderBottom: '4px solid #800000', height: '100%' }}>
         <Container size="xl" h="100%" px="md">
           <Group justify="space-between" h="100%">
             <Group>
-              <Box w={40} h={40} bg="rgba(255,255,255,0.1)" style={{ borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box w={40} h={40} bg="#800000" c="white" style={{ borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Text fw={700} ff="serif" size="xl">M</Text>
               </Box>
               <div>
-                <Title order={1} size="h3" c="white" style={{ lineHeight: 1.1 }}>George Eliot Archive</Title>
-                <Text size="xs" tt="uppercase" opacity={0.8} style={{ letterSpacing: '1px' }}>Middlemarch Character Network</Text>
+                <Title order={1} size="h3" c="#800000" ff="serif" style={{ lineHeight: 1.1 }}>George Eliot Archive</Title>
+                <Text size="xs" tt="uppercase" c="dimmed" style={{ letterSpacing: '1px' }}>Middlemarch Character Network</Text>
               </div>
             </Group>
 
@@ -42,14 +42,14 @@ const SiteHeader: React.FC = () => {
               <Anchor
                 component="button"
                 onClick={open}
-                c="white"
+                c="#800000"
                 fw={600}
                 tt="uppercase"
                 size="sm"
                 underline="never"
                 style={{ transition: 'color 0.2s', background: 'none', border: 'none', cursor: 'pointer' }}
-                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--mantine-color-accent-2)'}
-                onMouseLeave={(e) => e.currentTarget.style.color = 'white'}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#500000'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#800000'}
               >
                 About
               </Anchor>

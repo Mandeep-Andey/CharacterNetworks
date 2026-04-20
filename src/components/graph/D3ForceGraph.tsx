@@ -38,8 +38,8 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     const { setSelectedNode, selectedNode } = useSelection();
     const { searchTerm } = useControls();
 
-    const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-    const [activeCommunity, setActiveCommunity] = useState<number | null>(null);
+    const [tooltip, setTooltip] = useState<{ x: number, y: number, content: string } | null>(null);
+    const [activeCommunity, setActiveCommunity] = useState<string | number | null>(null);
 
     // Persistent refs for elements and states
     const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
@@ -140,13 +140,13 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         }
 
         // 3. Community Centers Calculation
-        const communities = Array.from(new Set(filteredNodes.map(d => d.community || 0)));
-        const communityCount = communities.length;
-        const communityCenters: { [key: number]: { x: number, y: number } } = {};
+        const groupKeys = Array.from(new Set(filteredNodes.map((d: any) => d.groupName || d.community || 'Unknown')));
+        const groupCount = groupKeys.length;
+        const communityCenters: { [key: string]: { x: number, y: number } } = {};
         const radius = Math.min(width, height) * 0.35;
-        communities.forEach((c, i) => {
-            const angle = (i / communityCount) * 2 * Math.PI;
-            communityCenters[c] = {
+        groupKeys.forEach((key, i) => {
+            const angle = (i / groupCount) * 2 * Math.PI;
+            communityCenters[key] = {
                 x: width / 2 + Math.cos(angle) * radius,
                 y: height / 2 + Math.sin(angle) * radius
             };
@@ -158,7 +158,8 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             if (prev) {
                 Object.assign(node, prev);
             } else {
-                const c = communityCenters[node.community || 0];
+                const key = node.groupName || node.community || 'Unknown';
+                const c = communityCenters[key];
                 node.x = c ? c.x : width / 2;
                 node.y = c ? c.y : height / 2;
             }
@@ -172,10 +173,10 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         const simulation = d3.forceSimulation(nodesForD3)
             .force("link", d3.forceLink(linksForD3).id((d) => (d as any).id).distance(LINK_DISTANCE))
             .force("charge", d3.forceManyBody().strength(chargeStrength))
-            .force("collide", d3.forceCollide().radius((d) => nodeRadius(d as any) + COLLIDE_RADIUS_PADDING).iterations(2))
+            .force("collide", d3.forceCollide().radius((d: any) => nodeRadius(d) + 15).iterations(2))
             .force("center", d3.forceCenter(width / 2, height / 2))
-            .force("x", d3.forceX((d) => communityCenters[(d as any).community || 0]?.x || width / 2).strength(COMMUNITY_X_STRENGTH))
-            .force("y", d3.forceY((d) => communityCenters[(d as any).community || 0]?.y || height / 2).strength(COMMUNITY_Y_STRENGTH));
+            .force("x", d3.forceX((d: any) => communityCenters[d.groupName || d.community || 'Unknown']?.x || width / 2).strength(0.08))
+            .force("y", d3.forceY((d: any) => communityCenters[d.groupName || d.community || 'Unknown']?.y || height / 2).strength(0.08));
 
         simulationRef.current = simulation;
         simulation.on("end", () => simulation.stop());
@@ -186,8 +187,12 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         // 7. Rendering: Nodes
         const debouncedShowTooltip = debounce((...args: unknown[]) => {
             const event = args[0] as MouseEvent;
-            const d = args[1] as { id: string; community?: number };
-            setTooltip({ x: event.clientX, y: event.clientY, content: `${d.id} (Group ${d.community})` });
+            const d = args[1] as { id: string; community?: number; groupName?: string };
+            setTooltip({ 
+                x: event.clientX, 
+                y: event.clientY, 
+                content: `${d.id} (Group ${d.groupName || d.community || 'Unknown'})` 
+            });
             d3.select(event.currentTarget as Element).attr("stroke", "#333").attr("stroke-width", 3)
                 .transition().duration(200).attr("r", nodeRadius(d) + 3);
         }, 120);
@@ -262,8 +267,8 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     const renderNodes = (
         container: d3.Selection<SVGGElement, unknown, null, undefined>,
         nodes: Node[],
-        activeCommunity: number | null,
-        setActiveCommunity: (c: number) => void,
+        activeCommunity: string | number | null,
+        setActiveCommunity: (c: string | number) => void,
         setSelectedNode: (n: Node | null) => void,
         debouncedShowTooltip: any,
         setTooltip: any,
@@ -280,9 +285,12 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 update => update.call(sel => sel.transition().duration(400).attr("r", (d: any) => nodeRadius(d))),
                 exit => exit.call(e => e.classed("exiting", true).transition().duration(400).attr("opacity", 0).remove())
             )
-            .on("click", (event, d) => {
+            .on("click", (event, d: any) => {
                 event.stopPropagation();
-                if (activeCommunity !== d.community) setActiveCommunity(d.community || 0);
+                const key = d.groupName || d.community || 0;
+                if (activeCommunity === null || activeCommunity !== key) {
+                    setActiveCommunity(key);
+                }
                 setSelectedNode(d as Node);
             })
             .on("mouseover", (event, d) => debouncedShowTooltip(event, d))
@@ -315,7 +323,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     const renderLabels = (
         container: d3.Selection<SVGGElement, unknown, null, undefined>,
         nodes: Node[],
-        activeCommunity: number | null,
+        activeCommunity: string | number | null,
         selectedNode: Node | null,
         links: Link[],
         zoomScale: number
@@ -325,8 +333,15 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             .join(
                 enter => enter.append("text")
                     .attr("dx", 12).attr("dy", ".35em").text(d => d.id)
-                    .style("font-family", "var(--mantine-font-family)").style("font-weight", "600").style("pointer-events", "none")
-                    .style("text-shadow", "1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white")
+                    .style("font-family", "var(--mantine-font-family)")
+                    .style("font-size", () => `${zoomScaleRef.current < 1 ? 12 : Math.max(9, 12 / Math.pow(zoomScaleRef.current, 0.6))}px`)
+                    .style("font-weight", "700")
+                    .style("pointer-events", "none")
+                    .attr("stroke", "rgba(255, 255, 255, 0.95)")
+                    .attr("stroke-width", 3)
+                    .attr("stroke-linejoin", "round")
+                    .attr("paint-order", "stroke")
+                    .attr("fill", "#111")
                     .attr("opacity", 0)
                     .call(sel => sel.transition().duration(500).attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, links, zoomScale))),
                 update => update.call(sel => sel.transition().duration(400).attr("opacity", (d: any) => computeLabelOpacity(d, activeCommunity, selectedNode, links, zoomScale))),
@@ -338,13 +353,17 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
     useEffect(() => {
         if (!svgRef.current) return;
         const svg = d3.select(svgRef.current);
+        const groupKeys = Array.from(new Set(filteredNodes.map((d: any) => d.groupName || d.community || 'Unknown')));
         
         svg.selectAll<SVGCircleElement, any>("g.node-group circle:not(.exiting)")
             .transition("visuals").duration(400)
             .attr("opacity", d => computeNodeOpacity(d, activeCommunity, searchTerm, selectedNode, filteredLinks))
-            .attr("fill", d => {
-                const baseColor = COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length];
-                if (activeCommunity !== null && d.community === activeCommunity) {
+            .attr("fill", (d: any) => {
+                const key = d.groupName || d.community || 'Unknown';
+                const groupIdx = groupKeys.indexOf(key);
+                const baseColor = COMMUNITY_COLORS[Math.max(0, groupIdx) % COMMUNITY_COLORS.length];
+                const currentKey = d.groupName || d.community || 0;
+                if (activeCommunity !== null && currentKey === activeCommunity) {
                     const color = d3.color(baseColor);
                     if (color) {
                         const interpolator = d3.interpolateRgb(color.brighter(1.5).formatHex(), color.darker(2).formatHex());
@@ -381,7 +400,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         const svg = d3.select(svgRef.current);
 
         if (activeCommunity !== null) {
-            const communityNodes = filteredNodes.filter(n => n.community === activeCommunity);
+            const communityNodes = filteredNodes.filter(n => (n.groupName || n.community || 0) === activeCommunity);
             if (communityNodes.length === 0) {
                 svg.transition().duration(750).call(zoomRef.current.transform as any, d3.zoomIdentity);
                 return;

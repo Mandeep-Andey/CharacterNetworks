@@ -15,12 +15,13 @@ export const nodeRadius = (d: { degree?: number } | D3NodeDatum): number => {
 /** Compute node opacity based on active filters and selection */
 export const computeNodeOpacity = (
     d: any,
-    activeCommunity: number | null,
+    activeCommunity: string | number | null,
     searchTerm: string,
     selectedNode: Node | null,
     filteredLinks: Link[]
 ): number => {
-    if (activeCommunity !== null && d.community !== activeCommunity) return 0.1;
+    const key = d.groupName || d.community || 0;
+    if (activeCommunity !== null && key !== activeCommunity) return 0.1;
     if (searchTerm && !d.id.toLowerCase().includes(searchTerm.toLowerCase())) return 0.1;
     if (selectedNode) {
         const isConnected = filteredLinks.some(l =>
@@ -37,12 +38,13 @@ export const computeNodeOpacity = (
 /** Compute label opacity based on active filters, selection, and zoom level */
 export const computeLabelOpacity = (
     d: any,
-    activeCommunity: number | null,
+    activeCommunity: string | number | null,
     selectedNode: Node | null,
     filteredLinks: Link[],
     zoomScale: number
 ): number => {
-    if (activeCommunity !== null && d.community !== activeCommunity) return 0;
+    const key = d.groupName || d.community || 0;
+    if (activeCommunity !== null && key !== activeCommunity) return 0;
     if (selectedNode) {
         const isConnected = filteredLinks.some(l =>
             (l.source === selectedNode.id && l.target === d.id) ||
@@ -55,10 +57,10 @@ export const computeLabelOpacity = (
     }
     
     // Semantic zoom:
-    // If zoomed in (k > 1.3), show ALL node labels.
-    // If zoomed out, only show prominent nodes (degree > 5).
-    if (zoomScale > 1.3) {
+    // If zoomed in (k > 1.2), show ALL node labels.
+    // If zoomed out, only show prominent nodes.
+    if (zoomScale > 1.2) {
         return 1;
     }
-    return (d.degree || 0) > 5 ? 1 : 0;
+    return (d.degree || 0) > 2 ? 1 : 0;
 };

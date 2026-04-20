@@ -15,8 +15,12 @@ describe('graphUtils', () => {
     });
 
     describe('computeNodeOpacity', () => {
-        const mockNodes: Node[] = [{ id: 'A', community: 1 }, { id: 'B', community: 1 }, { id: 'C', community: 2 }];
-        const mockLinks: Link[] = [{ source: 'A', target: 'B', value: 1 }];
+        const mockNodes: Node[] = [
+            { id: 'A', community: 1, group: 1, groupName: 'G1' }, 
+            { id: 'B', community: 1, group: 1, groupName: 'G1' }, 
+            { id: 'C', community: 2, group: 2, groupName: 'G2' }
+        ];
+        const mockLinks: Link[] = [{ source: 'A', target: 'B', value: 1, interactions: [] }];
 
         it('should return 1 when no filters are active', () => {
             expect(computeNodeOpacity(mockNodes[0], null, '', null, mockLinks)).toBe(1);
@@ -54,7 +58,7 @@ describe('graphUtils', () => {
 
     describe('computeLabelOpacity', () => {
         const mockNodes: any[] = [{ id: 'A', degree: 10, community: 1 }, { id: 'B', degree: 2, community: 1 }];
-        const mockLinks: Link[] = [{ source: 'A', target: 'B', value: 1 }];
+        const mockLinks: Link[] = [{ source: 'A', target: 'B', value: 1, interactions: [] }];
 
         it('should return 1 for prominent nodes at low zoom', () => {
             expect(computeLabelOpacity(mockNodes[0], null, null, mockLinks, 1.0)).toBe(1);

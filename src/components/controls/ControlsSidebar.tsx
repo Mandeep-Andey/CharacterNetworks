@@ -125,7 +125,7 @@ const ControlsSidebar: React.FC = () => {
                 <Button
                     fullWidth
                     variant={isPlaying ? "light" : "filled"}
-                    color={isPlaying ? "red" : "primary"}
+                    color={isPlaying ? "gray" : "#800000"}
                     onClick={() => setIsPlaying(!isPlaying)}
                     mb="xs"
                 >
@@ -162,7 +162,7 @@ const ControlsSidebar: React.FC = () => {
                     <ScrollArea h="100%" offsetScrollbars>
                         <Stack gap="lg">
                             <Box>
-                                <Group gap={4} mb="xs" wrap="nowrap">
+                                <Group gap={4} mb="xs" wrap="nowrap" align="center">
                                     <Title order={6} tt="uppercase" c="dimmed">Graph Settings</Title>
                                     <Tooltip label="Adjust the visual layout and filtering of the graph." multiline w={220} withArrow position="top">
                                         <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
@@ -219,7 +219,7 @@ const ControlsSidebar: React.FC = () => {
                             <Divider />
 
                             <Box>
-                                <Group gap={4} mb="xs" wrap="nowrap">
+                                <Group gap={4} mb="xs" wrap="nowrap" align="center">
                                     <Title order={6} tt="uppercase" c="dimmed">Groups</Title>
                                     <Tooltip label="Filter characters by their family or social group." multiline w={220} withArrow position="top">
                                         <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
@@ -242,7 +242,7 @@ const ControlsSidebar: React.FC = () => {
                             </Box>
 
                             <Box>
-                                <Group gap={4} mb="xs" wrap="nowrap">
+                                <Group gap={4} mb="xs" wrap="nowrap" align="center">
                                     <Title order={6} tt="uppercase" c="dimmed">Interaction Types</Title>
                                     <Tooltip label="Show or hide specific types of interactions." multiline w={220} withArrow position="top">
                                         <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">

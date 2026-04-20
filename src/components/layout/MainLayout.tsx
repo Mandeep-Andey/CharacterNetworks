@@ -5,6 +5,7 @@ import { useDisclosure } from '@mantine/hooks';
 import SiteHeader from './SiteHeader';
 import ChapterList from '../navigation/ChapterList';
 import ControlsSidebar from '../controls/ControlsSidebar';
+import NodeDetailsPanel from '../graph/NodeDetailsPanel';
 import { useData } from '../../context/DataContext';
 
 const MainLayout: React.FC = () => {
@@ -46,20 +47,31 @@ const MainLayout: React.FC = () => {
             </AppShell.Navbar>
 
             <AppShell.Aside style={{ zIndex: 100, backgroundColor: 'var(--mantine-color-gray-0)' }}>
-                <AppShell.Section p="md">
-                    <Group justify="space-between" mb="md" pb="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
+                <AppShell.Section p="md" pb="xs">
+                    <Group justify="space-between" mb="xs" pb="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
                         <Text fw={700} size="lg" style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-7)' }}>Controls</Text>
                         <ActionIcon variant="subtle" color="gray" onClick={toggleRight} hiddenFrom="sm">
                             ✕
                         </ActionIcon>
                     </Group>
                 </AppShell.Section>
-                <AppShell.Section grow>
+                
+                <AppShell.Section grow component={ScrollArea} px="md">
                     <ControlsSidebar />
+                </AppShell.Section>
+
+                <AppShell.Section p="md" pb="xs">
+                    <Group justify="space-between" mb="xs" pb="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
+                        <Text fw={700} size="lg" style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-7)' }}>Character Details</Text>
+                    </Group>
+                </AppShell.Section>
+
+                <AppShell.Section grow component={ScrollArea} px="md">
+                    <NodeDetailsPanel />
                 </AppShell.Section>
             </AppShell.Aside>
 
-            <AppShell.Main style={{ position: 'relative', height: '100vh', paddingTop: '80px' }}>
+            <AppShell.Main style={{ position: 'relative', height: '100vh', paddingTop: '80px', display: 'flex', flexDirection: 'column' }}>
                 <LoadingOverlay visible={loading} zIndex={1000} overlayProps={{ radius: "sm", blur: 2 }} />
 
                 {/* Toggle buttons when collapsed */}
@@ -90,7 +102,7 @@ const MainLayout: React.FC = () => {
                     </ActionIcon>
                 )}
 
-                <Box w="100%" h="100%">
+                <Box style={{ flex: 1, minHeight: 0, width: '100%', position: 'relative' }}>
                     <Outlet />
                 </Box>
             </AppShell.Main>
