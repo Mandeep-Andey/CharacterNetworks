@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mcpvault": {
+      "type": "local",
+      "command": [
+        "npx",
+        "@bitbonsai/mcpvault@latest",
+        "/Users/mandeep/Library/CloudStorage/GoogleDrive-andeymandeep@gmail.com/My Drive/Obsidian Vaults/Project MCP"
+      ],
+      "enabled": true
+    }
+  }
+}

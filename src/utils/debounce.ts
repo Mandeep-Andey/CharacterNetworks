@@ -4,13 +4,13 @@
  * have elapsed since the last call. Includes a `.cancel()` method
  * to abort any pending invocation.
  */
-export function debounce<T extends (...args: any[]) => void>(
-    fn: T,
+export function debounce<R>(
+    fn: (...args: unknown[]) => R,
     delay: number
-): T & { cancel: () => void } {
+): ((...args: unknown[]) => void) & { cancel: () => void } {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    const debounced = ((...args: any[]) => {
+    const debounced = (...args: unknown[]): void => {
         if (timeoutId !== null) {
             clearTimeout(timeoutId);
         }
@@ -18,14 +18,15 @@ export function debounce<T extends (...args: any[]) => void>(
             fn(...args);
             timeoutId = null;
         }, delay);
-    }) as T & { cancel: () => void };
+    };
 
-    debounced.cancel = () => {
+    const result = debounced as ((...args: unknown[]) => void) & { cancel: () => void };
+    result.cancel = () => {
         if (timeoutId !== null) {
             clearTimeout(timeoutId);
             timeoutId = null;
         }
     };
 
-    return debounced;
+    return result;
 }
