@@ -99,7 +99,7 @@ import { ControlsProvider, useControls } from './context/ControlsContext';
 
 function App() {
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL}>
       <ViewModeProvider>
       <DataProvider>
       <ExperimentalDataProvider>
