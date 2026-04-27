@@ -10,4 +10,5 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
   },
+  base: globalThis.process?.env?.VITE_BASE_PATH || "/CharacterNetworks",
 })
