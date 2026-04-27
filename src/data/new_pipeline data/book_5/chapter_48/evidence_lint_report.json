@@ -1,0 +1,138 @@
+{
+  "chapter_num": 48,
+  "passed": true,
+  "total_events": 21,
+  "passed_events": 21,
+  "failed_events": 0,
+  "total_violations": 0,
+  "rule_counts": {},
+  "events": [
+    {
+      "event_id": "ch48_scene_1_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_1_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_1_e3",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_1_e4",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_2_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_2_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_2_e3",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_3_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_3_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_4_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_4_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_6_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_6_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_7_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_7_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_8_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_8_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_8_e3",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_9_e1",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_9_e2",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    },
+    {
+      "event_id": "ch48_scene_9_e3",
+      "chapter_num": 48,
+      "passed": true,
+      "violations": []
+    }
+  ],
+  "generated_at": "2026-04-20T18:41:08.581890Z"
+}

@@ -2,12 +2,16 @@ import React from 'react';
 import { Breadcrumbs, Anchor, Text, Box } from '@mantine/core';
 
 interface GraphBreadcrumbsProps {
-    activeCommunity: number | null;
+    activeCommunity: string | number | null;
     onReset: () => void;
 }
 
 const GraphBreadcrumbs: React.FC<GraphBreadcrumbsProps> = ({ activeCommunity, onReset }) => {
     if (activeCommunity === null) return null;
+
+    const displayLabel = typeof activeCommunity === 'number' 
+        ? `Community ${activeCommunity + 1}` 
+        : activeCommunity;
 
     return (
         <Box
@@ -28,7 +32,7 @@ const GraphBreadcrumbs: React.FC<GraphBreadcrumbsProps> = ({ activeCommunity, on
                     All Characters
                 </Anchor>
                 <Text c="dimmed" size="sm" fw={500}>
-                    Community {activeCommunity + 1}
+                    {displayLabel}
                 </Text>
             </Breadcrumbs>
         </Box>

@@ -3,11 +3,24 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'rea
 import { DataProvider, useData } from './context/DataContext';
 import MainLayout from './components/layout/MainLayout';
 import D3ForceGraph from './components/graph/D3ForceGraph';
+import { ViewModeProvider, useViewMode } from './context/ViewModeContext';
+import { ExperimentalDataProvider } from './context/ExperimentalDataContext';
+import ExperimentalGraphView from './components/graph/ExperimentalGraphView';
 
 import { Center, Text, Box, Paper } from '@mantine/core';
 
 const GraphView = () => {
   const { bookId, chapterId } = useParams();
+  const { viewMode } = useViewMode();
+  
+  if (viewMode === 'experimental') {
+    return <ExperimentalGraphView chapterId={chapterId} bookId={bookId} />;
+  }
+
+  return <StableGraphView bookId={bookId} chapterId={chapterId} />;
+};
+
+const StableGraphView = ({ bookId, chapterId }: { bookId?: string; chapterId?: string }) => {
   const { data, loading } = useData();
   const { selectedGroups, selectedInteractionTypes, minConnections, forceStrength } = useControls();
 
@@ -87,7 +100,9 @@ import { ControlsProvider, useControls } from './context/ControlsContext';
 function App() {
   return (
     <Router>
+      <ViewModeProvider>
       <DataProvider>
+      <ExperimentalDataProvider>
         <ControlsProvider>
           <SelectionProvider>
             <Routes>
@@ -98,7 +113,9 @@ function App() {
             </Routes>
           </SelectionProvider>
         </ControlsProvider>
+      </ExperimentalDataProvider>
       </DataProvider>
+      </ViewModeProvider>
     </Router>
   );
 }

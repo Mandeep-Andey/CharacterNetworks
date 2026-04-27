@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Box } from '@mantine/core';
+import { Box, ActionIcon, Tooltip as MantineTooltip } from '@mantine/core';
+import { IconFocusCentered } from '@tabler/icons-react';
 import * as d3 from 'd3';
 import { Node, Link } from '../../context/DataContext';
 import { useSelection } from '../../context/SelectionContext';
@@ -68,6 +69,17 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
             );
         }
     }, [setSelectedNode]);
+
+    // ─── Center View Callback ───────────────────────────────────────────
+    const centerView = useCallback(() => {
+        if (svgRef.current && zoomRef.current) {
+            const svg = d3.select(svgRef.current);
+            svg.transition().duration(750).call(
+                zoomRef.current.transform as any,
+                d3.zoomIdentity
+            );
+        }
+    }, []);
 
     // ─── Esc Key Handler (Simulation Auto-Pause + Reset) ────────────────
     useEffect(() => {
@@ -280,7 +292,7 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 enter => enter.append("circle")
                     .attr("r", 0).attr("opacity", 0)
                     .attr("fill", d => COMMUNITY_COLORS[(d.community || 0) % COMMUNITY_COLORS.length])
-                    .attr("cursor", "pointer")
+                    .attr("cursor", "grab")
                     .call(sel => sel.transition().duration(500).attr("r", (d: any) => nodeRadius(d))),
                 update => update.call(sel => sel.transition().duration(400).attr("r", (d: any) => nodeRadius(d))),
                 exit => exit.call(e => e.classed("exiting", true).transition().duration(400).attr("opacity", 0).remove())
@@ -311,12 +323,18 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
                 .on("start", (event) => {
                     if (!event.active) simulation.alphaTarget(0.3).restart();
                     event.subject.fx = event.subject.x; event.subject.fy = event.subject.y;
+                    if (event.sourceEvent && event.sourceEvent.target) {
+                        d3.select(event.sourceEvent.target).attr("cursor", "grabbing");
+                    }
                 })
                 .on("drag", (event) => {
                     event.subject.fx = event.x; event.subject.fy = event.y;
                 })
                 .on("end", (event) => {
                     if (!event.active) simulation.alphaTarget(0);
+                    if (event.sourceEvent && event.sourceEvent.target) {
+                        d3.select(event.sourceEvent.target).attr("cursor", "grab");
+                    }
                 }) as any);
     };
 
@@ -431,6 +449,22 @@ const D3ForceGraph: React.FC<D3ForceGraphProps> = ({
         <Box w="100%" h="100%" pos="relative" bg="transparent">
             <GraphBreadcrumbs activeCommunity={activeCommunity} onReset={() => setActiveCommunity(null)} />
             <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: '100%', display: 'block' }} />
+            
+            <MantineTooltip label="Fit to Screen" position="left" withArrow>
+                <ActionIcon 
+                    variant="default" 
+                    size="lg" 
+                    radius="md" 
+                    pos="absolute" 
+                    bottom={16} 
+                    right={16} 
+                    style={{ zIndex: 10, boxShadow: 'var(--mantine-shadow-sm)' }}
+                    onClick={centerView}
+                >
+                    <IconFocusCentered size={20} stroke={1.5} />
+                </ActionIcon>
+            </MantineTooltip>
+
             <GraphTooltip tooltip={tooltip} />
             <GraphStats nodeCount={filteredNodes.length} linkCount={filteredLinks.length} />
         </Box>

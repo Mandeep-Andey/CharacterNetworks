@@ -1,9 +1,11 @@
 import React from 'react';
 import { Group, Title, Text, Anchor, Container, Box, Modal, List } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useViewMode } from '../../context/ViewModeContext';
 
 const SiteHeader: React.FC = () => {
   const [opened, { open, close }] = useDisclosure(false);
+  const { viewMode, setViewMode } = useViewMode();
 
   return (
     <>
@@ -39,10 +41,18 @@ const SiteHeader: React.FC = () => {
             </Group>
 
             <Group visibleFrom="md" gap="lg">
+              <Group gap="xs" style={{ border: '1px solid #e0e0e0', borderRadius: '4px', padding: '2px', background: '#f8f9fa' }}>
+                  <Text size="xs" fw={viewMode === 'stable' ? 700 : 400} c={viewMode === 'stable' ? '#800000' : 'dimmed'} 
+                        px="sm" py={4} style={{ cursor: 'pointer', background: viewMode === 'stable' ? 'white' : 'transparent', borderRadius: '2px', transition: 'all 0.2s' }}
+                        onClick={() => setViewMode('stable')}>Stable</Text>
+                  <Text size="xs" fw={viewMode === 'experimental' ? 700 : 400} c={viewMode === 'experimental' ? '#800000' : 'dimmed'}
+                        px="sm" py={4} style={{ cursor: 'pointer', background: viewMode === 'experimental' ? 'white' : 'transparent', borderRadius: '2px', transition: 'all 0.2s' }}
+                        onClick={() => setViewMode('experimental')}>Pipeline v4</Text>
+              </Group>
+
               <Anchor
                 component="button"
                 onClick={open}
-                c="#800000"
                 fw={600}
                 tt="uppercase"
                 size="sm"
