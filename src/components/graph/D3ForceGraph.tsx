@@ -9,15 +9,12 @@ import GraphBreadcrumbs from './GraphBreadcrumbs';
 import GraphTooltip from './GraphTooltip';
 import GraphStats from './GraphStats';
 import { debounce } from '../../utils/debounce';
-import { D3ForceGraphProps, TooltipState } from './types';
+import { D3ForceGraphProps } from './types';
 import {
-    COLLIDE_RADIUS_PADDING,
     LINK_DISTANCE,
     CHARGE_MULTIPLIER,
     ZOOM_MIN,
     ZOOM_MAX,
-    COMMUNITY_X_STRENGTH,
-    COMMUNITY_Y_STRENGTH,
     NODE_STROKE_WIDTH,
     LINK_STROKE_OPACITY,
     COMMUNITY_COLORS

@@ -2,10 +2,12 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useData } from '../../context/DataContext';
 import { useControls } from '../../context/ControlsContext';
-import { Stack, Title, SimpleGrid, Button, Box } from '@mantine/core';
+import { useExperimentalData } from '../../context/ExperimentalDataContext';
+import { Stack, Title, SimpleGrid, Button, Box, Badge, Group } from '@mantine/core';
 
 const ChapterList: React.FC = () => {
     const { chapters, loading } = useData();
+    const { availableChapters } = useExperimentalData();
     const { isPlaying, setIsPlaying, playbackSpeed } = useControls();
     const navigate = useNavigate();
     const location = useLocation();
@@ -64,17 +66,20 @@ const ChapterList: React.FC = () => {
                             {chapterList.map((chapter) => {
                                 const path = `/${bookName.replace(/\s+/g, '')}/${chapter}`;
                                 const isActive = location.pathname === path;
+                                const isProcessed = availableChapters.includes(chapter.toString());
+                                
                                 return (
                                     <Button
                                         key={chapter}
                                         component={NavLink}
                                         to={path}
-                                        variant={isActive ? "filled" : "default"}
-                                        color={isActive ? "accent" : "gray"}
+                                        variant={isActive ? "filled" : (isProcessed ? "light" : "default")}
+                                        color={isActive ? "accent" : (isProcessed ? "accent" : "gray")}
                                         size="xs"
                                         ref={isActive ? activeRef : null}
                                         styles={{
                                             root: {
+                                                opacity: isProcessed ? 1 : 0.6,
                                                 '&:hover': {
                                                     borderColor: 'var(--mantine-color-accent-5)',
                                                     color: isActive ? 'white' : 'var(--mantine-color-accent-5)'

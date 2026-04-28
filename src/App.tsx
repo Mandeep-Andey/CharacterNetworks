@@ -11,13 +11,8 @@ import { Center, Text, Box, Paper } from '@mantine/core';
 
 const GraphView = () => {
   const { bookId, chapterId } = useParams();
-  const { viewMode } = useViewMode();
   
-  if (viewMode === 'experimental') {
-    return <ExperimentalGraphView chapterId={chapterId} bookId={bookId} />;
-  }
-
-  return <StableGraphView bookId={bookId} chapterId={chapterId} />;
+  return <ExperimentalGraphView chapterId={chapterId} bookId={bookId} />;
 };
 
 const StableGraphView = ({ bookId, chapterId }: { bookId?: string; chapterId?: string }) => {

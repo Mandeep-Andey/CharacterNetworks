@@ -26,15 +26,15 @@ const ExperimentalGraphView: React.FC<ExperimentalGraphViewProps> = ({ bookId, c
     }, [chapterId, currentChapter, setCurrentChapter]);
 
     if (loading) {
-        return <Center h="100%"><Text c="dimmed">Loading experimental NLP data...</Text></Center>;
+        return <Center h="100%"><Text c="dimmed">Loading graph data...</Text></Center>;
     }
 
-    // If chapterId isn't loaded or doesn't exist in our experimental scope
+    // If chapterId isn't loaded or doesn't exist in our current scope
     if (!graphData || !availableChapters.includes(chapterId || '')) {
         return (
             <Center h="100%" style={{ flexDirection: 'column', gap: '1rem' }}>
-                <Text c="dimmed" size="lg">NLP Pipeline Output not strictly generated for Chapter {chapterId}.</Text>
-                <Text size="sm">Experimental data currently resides in chapters: {availableChapters.join(', ')}.</Text>
+                <Text c="dimmed" size="lg">Graph data not available for Chapter {chapterId}.</Text>
+                <Text size="sm">Processed data currently resides in chapters: {availableChapters.join(', ')}.</Text>
                 {availableChapters.length > 0 && (
                     <Button variant="light" onClick={() => navigate(`/${bookId}/${availableChapters[0]}`)}>
                         Jump to Chapter {availableChapters[0]}
@@ -58,13 +58,13 @@ const ExperimentalGraphView: React.FC<ExperimentalGraphViewProps> = ({ bookId, c
                 style={{
                     zIndex: 10,
                     backdropFilter: 'blur(8px)',
-                    backgroundColor: 'rgba(255, 230, 235, 0.85)', // Slight tint to indicate experimental mode
+                    backgroundColor: 'rgba(255, 255, 255, 0.85)',
                     transform: 'translateX(-50%)',
-                    border: '1px solid rgba(255, 0, 0, 0.3)'
+                    border: '1px solid rgba(0, 0, 0, 0.1)'
                 }}
             >
-                <Text size="md" fw={700} ff="serif" c="red.9">
-                    Experimental Pipeline V4: Chapter {chapterId}
+                <Text size="md" fw={700} ff="serif" c="dark.6">
+                    Viewing: Chapter {chapterId}
                 </Text>
             </Paper>
             <D3ForceGraph

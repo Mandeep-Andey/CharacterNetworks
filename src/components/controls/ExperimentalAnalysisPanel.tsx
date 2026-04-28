@@ -1,12 +1,12 @@
 import React from 'react';
-import { Stack, Text, Card, Group, Badge, ScrollArea, RingProgress, Divider } from '@mantine/core';
+import { Stack, Text, Card, Group, Badge, ScrollArea, Divider } from '@mantine/core';
 import { useExperimentalData } from '../../context/ExperimentalDataContext';
 
 const ExperimentalAnalysisPanel: React.FC = () => {
     const { graphData, rawEvents, lintReport, loading } = useExperimentalData();
 
     if (loading || !graphData || !rawEvents) {
-        return <Text c="dimmed">Loading experimental analytics...</Text>;
+        return <Text c="dimmed">Loading analytics...</Text>;
     }
 
     const totalInteractions = rawEvents.length;

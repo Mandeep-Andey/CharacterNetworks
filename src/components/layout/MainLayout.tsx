@@ -9,12 +9,16 @@ import NodeDetailsPanel from '../graph/NodeDetailsPanel';
 import ExperimentalAnalysisPanel from '../controls/ExperimentalAnalysisPanel';
 import { useData } from '../../context/DataContext';
 import { useViewMode } from '../../context/ViewModeContext';
+import { useExperimentalData } from '../../context/ExperimentalDataContext';
 
 const MainLayout: React.FC = () => {
-    const { loading } = useData();
+    const { loading: stableLoading } = useData();
+    const { loading: experimentalLoading } = useExperimentalData();
     const { viewMode } = useViewMode();
     const [leftOpened, { toggle: toggleLeft }] = useDisclosure(true);
     const [rightOpened, { toggle: toggleRight }] = useDisclosure(true);
+
+    const loading = stableLoading || experimentalLoading;
 
     return (
         <AppShell
@@ -60,7 +64,7 @@ const MainLayout: React.FC = () => {
                 </AppShell.Section>
                 
                 <AppShell.Section grow component={ScrollArea} px="md">
-                    {viewMode === 'experimental' ? <ExperimentalAnalysisPanel /> : <ControlsSidebar />}
+                    <ExperimentalAnalysisPanel />
                 </AppShell.Section>
 
                 <AppShell.Section p="md" pb="xs">

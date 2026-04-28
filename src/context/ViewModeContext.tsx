@@ -10,7 +10,7 @@ interface ViewModeContextType {
 const ViewModeContext = createContext<ViewModeContextType | undefined>(undefined);
 
 export const ViewModeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [viewMode, setViewMode] = useState<ViewMode>('stable');
+    const [viewMode, setViewMode] = useState<ViewMode>('experimental');
     
     return (
         <ViewModeContext.Provider value={{ viewMode, setViewMode }}>
