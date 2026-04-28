@@ -1,19 +1,14 @@
 import * as d3 from 'd3';
-import { Node, Link } from '../../context/DataContext';
+import { KnowledgeNode, KnowledgeEdge } from '../../context/DataContext';
 
-export type D3NodeDatum = d3.SimulationNodeDatum & { 
-    degree?: number; 
-    community?: number; 
+export type D3NodeDatum = d3.SimulationNodeDatum & KnowledgeNode & { 
     id: string; 
 };
 
-export interface D3ForceGraphProps {
-    nodes: Node[];
-    links: Link[];
-    width?: number;
-    height?: number;
-    forceStrength?: number;
-}
+export type D3LinkDatum = d3.SimulationLinkDatum<D3NodeDatum> & KnowledgeEdge & {
+    source: string | D3NodeDatum;
+    target: string | D3NodeDatum;
+};
 
 export interface TooltipState {
     x: number;

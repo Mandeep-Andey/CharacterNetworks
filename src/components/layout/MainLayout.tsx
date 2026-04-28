@@ -3,22 +3,14 @@ import { Outlet } from 'react-router-dom';
 import { AppShell, Group, Text, ScrollArea, ActionIcon, LoadingOverlay, Box } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import SiteHeader from './SiteHeader';
-import ChapterList from '../navigation/ChapterList';
 import ControlsSidebar from '../controls/ControlsSidebar';
-import NodeDetailsPanel from '../graph/NodeDetailsPanel';
-import ExperimentalAnalysisPanel from '../controls/ExperimentalAnalysisPanel';
+import NodeDetailsPanel from '../controls/NodeDetailsPanel';
 import { useData } from '../../context/DataContext';
-import { useViewMode } from '../../context/ViewModeContext';
-import { useExperimentalData } from '../../context/ExperimentalDataContext';
 
 const MainLayout: React.FC = () => {
-    const { loading: stableLoading } = useData();
-    const { loading: experimentalLoading } = useExperimentalData();
-    const { viewMode } = useViewMode();
+    const { loading } = useData();
     const [leftOpened, { toggle: toggleLeft }] = useDisclosure(true);
     const [rightOpened, { toggle: toggleRight }] = useDisclosure(true);
-
-    const loading = stableLoading || experimentalLoading;
 
     return (
         <AppShell
@@ -42,38 +34,32 @@ const MainLayout: React.FC = () => {
             <AppShell.Navbar style={{ zIndex: 100, backgroundColor: 'var(--mantine-color-gray-0)' }}>
                 <AppShell.Section p="md">
                     <Group justify="space-between" mb="md" pb="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
-                        <Text fw={700} size="lg" style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-7)' }}>Chapters</Text>
+                        <Text fw={700} size="lg" style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-7)' }}>
+                            Graph Controls
+                        </Text>
                         <ActionIcon variant="subtle" color="gray" onClick={toggleLeft} hiddenFrom="sm">
                             ✕
                         </ActionIcon>
                     </Group>
                 </AppShell.Section>
-                <AppShell.Section grow component={ScrollArea}>
-                    <ChapterList />
+                <AppShell.Section grow component={ScrollArea} px="md">
+                    <ControlsSidebar />
                 </AppShell.Section>
             </AppShell.Navbar>
 
             <AppShell.Aside style={{ zIndex: 100, backgroundColor: 'var(--mantine-color-gray-0)' }}>
                 <AppShell.Section p="md" pb="xs">
                     <Group justify="space-between" mb="xs" pb="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
-                        <Text fw={700} size="lg" style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-7)' }}>Controls</Text>
+                        <Text fw={700} size="lg" style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-7)' }}>
+                            Knowledge Panel
+                        </Text>
                         <ActionIcon variant="subtle" color="gray" onClick={toggleRight} hiddenFrom="sm">
                             ✕
                         </ActionIcon>
                     </Group>
                 </AppShell.Section>
                 
-                <AppShell.Section grow component={ScrollArea} px="md">
-                    <ExperimentalAnalysisPanel />
-                </AppShell.Section>
-
-                <AppShell.Section p="md" pb="xs">
-                    <Group justify="space-between" mb="xs" pb="xs" style={{ borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
-                        <Text fw={700} size="lg" style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-7)' }}>Character Details</Text>
-                    </Group>
-                </AppShell.Section>
-
-                <AppShell.Section grow component={ScrollArea} px="md">
+                <AppShell.Section grow component={ScrollArea}>
                     <NodeDetailsPanel />
                 </AppShell.Section>
             </AppShell.Aside>

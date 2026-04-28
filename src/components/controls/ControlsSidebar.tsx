@@ -1,346 +1,121 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useSelection } from '../../context/SelectionContext';
-import { useControls } from '../../context/ControlsContext';
+import React, { useState } from 'react';
+import { Box, Select, Stack, Text, Divider, Modal, Button, Group } from '@mantine/core';
+import { useAnalytics } from '../../context/AnalyticsContext';
 import { useData } from '../../context/DataContext';
-import AnalysisPanel from './AnalysisPanel';
-import { Stack, Title, Text, Slider, TextInput, Paper, Divider, Box, Button, Group, Badge, ScrollArea, Accordion, ThemeIcon, Tabs, Checkbox, MultiSelect, Tooltip, ActionIcon } from '@mantine/core';
 import { IconInfoCircle } from '@tabler/icons-react';
 
 const ControlsSidebar: React.FC = () => {
+    const { isAnalyticsMode, colorBy, setColorBy, sizeBy, setSizeBy } = useAnalytics();
     const {
-        minConnections, setMinConnections,
-        forceStrength, setForceStrength,
-        searchTerm, setSearchTerm,
-        isPlaying, setIsPlaying,
-        selectedGroups, setSelectedGroups,
-        selectedInteractionTypes, setSelectedInteractionTypes
-    } = useControls();
-
-    const { selectedNode } = useSelection();
-    const { data, chapters } = useData();
-    const { bookId, chapterId } = useParams();
-    const navigate = useNavigate();
-
-    // Auto-Play Logic — uses shared isPlaying/setIsPlaying from ControlsContext
-
-    useEffect(() => {
-        let interval: ReturnType<typeof setInterval>;
-        if (isPlaying && chapters && bookId && chapterId) {
-            interval = setInterval(() => {
-                const currentBookChapters = chapters[bookId];
-                if (!currentBookChapters) return;
-
-                const currentChapterNum = parseInt(chapterId, 10);
-                const currentIndex = currentBookChapters.indexOf(currentChapterNum);
-
-                if (currentIndex !== -1 && currentIndex < currentBookChapters.length - 1) {
-                    // Next chapter in same book
-                    navigate(`/${bookId}/${currentBookChapters[currentIndex + 1]}`);
-                } else {
-                    // Try next book
-                    const bookKeys = Object.keys(chapters);
-                    const currentBookIndex = bookKeys.indexOf(bookId);
-                    if (currentBookIndex !== -1 && currentBookIndex < bookKeys.length - 1) {
-                        const nextBookId = bookKeys[currentBookIndex + 1];
-                        const nextBookChapters = chapters[nextBookId];
-                        if (nextBookChapters && nextBookChapters.length > 0) {
-                            navigate(`/${nextBookId}/${nextBookChapters[0]}`);
-                        } else {
-                            setIsPlaying(false); // End of content
-                        }
-                    } else {
-                        setIsPlaying(false); // End of all books
-                    }
-                }
-            }, 3000); // 3 seconds per chapter
-        }
-        return () => clearInterval(interval);
-    }, [isPlaying, chapters, bookId, chapterId, navigate]);
-
-    // Helper to resolve a D3 link endpoint to a string id.
-    // After D3 runs its simulation it replaces source/target strings with
-    // full node objects — we must handle both forms.
-    const resolveId = (endpoint: any): string =>
-        typeof endpoint === 'object' && endpoint !== null ? endpoint.id : endpoint;
-
-    // Helper to get interactions for selected node
-    const getInteractions = () => {
-        if (!selectedNode || !bookId || !chapterId || !data) return [];
-        const dataKey = `Chapter ${chapterId}`;
-        const chapterData = data[dataKey];
-        if (!chapterData) return [];
-
-        // Find links connected to selected node, handling both string and object endpoints
-        return chapterData.links.filter(l =>
-            resolveId(l.source) === selectedNode.id || resolveId(l.target) === selectedNode.id
-        )
-            .map(l => {
-                const sourceId = resolveId(l.source);
-                const targetId = resolveId(l.target);
-                const otherId = sourceId === selectedNode.id ? targetId : sourceId;
-                const otherNode = chapterData.nodes.find(n => n.id === otherId);
-                return {
-                    otherId,
-                    otherNode,
-                    value: l.value,
-                    interactions: l.interactions
-                };
-            })
-            .sort((a, b) => b.value - a.value);
-    };
-
-    const nodeInteractions = getInteractions();
-
-    // Get current chapter data for analysis and filters
-    const currentChapterData = (bookId && chapterId && data) ? data[`Chapter ${chapterId}`] : null;
-
-    // Extract unique groups and interaction types for filters
-    const availableGroups = React.useMemo(() => {
-        if (!currentChapterData) return [];
-        const groups = new Set(currentChapterData.nodes.map(n => n.groupName || 'Unknown'));
-        return Array.from(groups).sort();
-    }, [currentChapterData]);
-
-    const availableInteractionTypes = React.useMemo(() => {
-        if (!currentChapterData) return [];
-        const types = new Set<string>();
-        currentChapterData.links.forEach(l => l.interactions.forEach(i => types.add(i.type)));
-        return Array.from(types).sort();
-    }, [currentChapterData]);
-
-    // Auto-select tab based on context
-    const [activeTab, setActiveTab] = useState<string | null>('analysis');
-
-    useEffect(() => {
-        if (selectedNode) {
-            setActiveTab('inspector');
-        }
-    }, [selectedNode]);
+        currentBook, setCurrentBook,
+        currentChapter, setCurrentChapter,
+        availableBooks, availableChapters
+    } = useData();
+    const [aboutOpen, setAboutOpen] = useState(false);
 
     return (
-        <Stack gap="sm" h="100%" p="md">
-            {/* Navigation / Playback Header */}
-            <Box pb="xs">
-                <Button
-                    fullWidth
-                    variant={isPlaying ? "light" : "filled"}
-                    color={isPlaying ? "gray" : "#800000"}
-                    onClick={() => setIsPlaying(!isPlaying)}
-                    mb="xs"
-                >
-                    {isPlaying ? "Pause Auto-Play" : "Start Auto-Play"}
-                </Button>
-                <TextInput
-                    placeholder="Search character..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.currentTarget.value)}
-                    rightSection="🔍"
-                    radius="md"
-                    size="xs"
-                />
-            </Box>
+        <Stack gap="md">
+            <Button 
+                variant="light" 
+                color="blue" 
+                leftSection={<IconInfoCircle size="1.2rem" />}
+                onClick={() => setAboutOpen(true)}
+                fullWidth
+            >
+                About This Graph
+            </Button>
 
-            <Tabs value={activeTab} onChange={setActiveTab} variant="pills" radius="sm" color="primary" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-                <Tabs.List grow mb="md">
-                    <Tabs.Tab value="analysis">Analysis</Tabs.Tab>
-                    <Tabs.Tab value="filters">Filters</Tabs.Tab>
-                    <Tabs.Tab value="inspector">Inspector</Tabs.Tab>
-                </Tabs.List>
+            <Divider />
 
-                <Tabs.Panel value="analysis" style={{ flex: 1, overflow: 'hidden' }}>
-                    <ScrollArea h="100%" offsetScrollbars>
-                        {currentChapterData ? (
-                            <AnalysisPanel nodes={currentChapterData.nodes} links={currentChapterData.links} />
-                        ) : (
-                            <Text c="dimmed" size="sm">Loading data...</Text>
-                        )}
-                    </ScrollArea>
-                </Tabs.Panel>
+            <Stack gap="xs">
+                <Text fw={600} size="sm">Narrative Navigation</Text>
+                <Group grow>
+                    <Select
+                        label="Book"
+                        data={availableBooks.map(b => ({ value: b, label: `Book ${b}` }))}
+                        value={currentBook}
+                        onChange={(val) => {
+                            setCurrentBook(val || '1');
+                            setCurrentChapter('all'); 
+                        }}
+                        size="xs"
+                    />
+                    <Select
+                        label="Chapter"
+                        data={[
+                            { value: 'all', label: 'All Chapters' },
+                            ...availableChapters.map(c => ({ value: c, label: `Chapter ${c}` }))
+                        ]}
+                        value={currentChapter}
+                        onChange={(val) => setCurrentChapter(val || 'all')}
+                        size="xs"
+                    />
+                </Group>
+            </Stack>
 
-                <Tabs.Panel value="filters" style={{ flex: 1, overflow: 'hidden' }}>
-                    <ScrollArea h="100%" offsetScrollbars>
-                        <Stack gap="lg">
-                            <Box>
-                                <Group gap={4} mb="xs" wrap="nowrap" align="center">
-                                    <Title order={6} tt="uppercase" c="dimmed">Graph Settings</Title>
-                                    <Tooltip label="Adjust the visual layout and filtering of the graph." multiline w={220} withArrow position="top">
-                                        <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
-                                            <IconInfoCircle size={14} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                </Group>
-                                <Stack gap="xs">
-                                    <Box>
-                                        <Group justify="space-between" mb={4}>
-                                            <Group gap={4} wrap="nowrap">
-                                                <Text size="xs" fw={600}>Min Connections</Text>
-                                                <Tooltip label="Filter out characters with fewer than this many connections." multiline w={220} withArrow position="top">
-                                                    <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
-                                                        <IconInfoCircle size={12} />
-                                                    </ActionIcon>
-                                                </Tooltip>
-                                            </Group>
-                                            <Badge variant="light" color="gray">{minConnections}</Badge>
-                                        </Group>
-                                        <Slider
-                                            min={1}
-                                            max={10}
-                                            value={minConnections}
-                                            onChange={setMinConnections}
-                                            color="primary"
-                                            size="sm"
-                                        />
-                                    </Box>
-                                    <Box>
-                                        <Group justify="space-between" mb={4}>
-                                            <Group gap={4} wrap="nowrap">
-                                                <Text size="xs" fw={600}>Force Strength</Text>
-                                                <Tooltip label="Adjust the repulsive force between nodes to spread them out." multiline w={220} withArrow position="top">
-                                                    <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
-                                                        <IconInfoCircle size={12} />
-                                                    </ActionIcon>
-                                                </Tooltip>
-                                            </Group>
-                                            <Badge variant="light" color="gray">{forceStrength}</Badge>
-                                        </Group>
-                                        <Slider
-                                            min={1}
-                                            max={100}
-                                            value={forceStrength}
-                                            onChange={setForceStrength}
-                                            color="primary"
-                                            size="sm"
-                                        />
-                                    </Box>
-                                </Stack>
-                            </Box>
+            <Divider />
 
-                            <Divider />
+            {!isAnalyticsMode ? (
+                <Box p="sm" bg="gray.0" style={{ borderRadius: '8px' }}>
+                    <Text size="sm" c="dimmed" ta="center">
+                        Analytics Mode is disabled. Enable it from the top control bar to unlock advanced filters and narrative metrics.
+                    </Text>
+                </Box>
+            ) : (
+                <Box>
+                    <Text fw={600} mb="xs">Advanced Controls</Text>
+                    <Stack gap="sm">
+                        <Select
+                            label="Color Nodes By"
+                            data={[
+                                { value: 'community', label: 'Family/Clique' },
+                                { value: 'social_class', label: 'Social Class' },
+                                { value: 'gender', label: 'Gender' }
+                            ]}
+                            value={colorBy}
+                            onChange={(val) => setColorBy(val as any)}
+                        />
+                        <Select
+                            label="Size Nodes By"
+                            data={[
+                                { value: 'uniform', label: 'Uniform Size' },
+                                { value: 'total_events', label: 'Total Events (Prominence)' },
+                                { value: 'agency_score', label: 'Agency Score' }
+                            ]}
+                            value={sizeBy}
+                            onChange={(val) => setSizeBy(val as any)}
+                        />
+                        <Text size="xs" c="dimmed" mt="xs">
+                            Select nodes or edges in the graph to see detailed textual evidence and exact metric values in the right panel.
+                        </Text>
+                    </Stack>
+                </Box>
+            )}
 
-                            <Box>
-                                <Group gap={4} mb="xs" wrap="nowrap" align="center">
-                                    <Title order={6} tt="uppercase" c="dimmed">Groups</Title>
-                                    <Tooltip label="Filter characters by their family or social group." multiline w={220} withArrow position="top">
-                                        <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
-                                            <IconInfoCircle size={14} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                </Group>
-                                <MultiSelect
-                                    data={availableGroups}
-                                    value={selectedGroups.length > 0 ? selectedGroups : []}
-                                    onChange={setSelectedGroups}
-                                    placeholder="Filter by group..."
-                                    searchable
-                                    clearable
-                                    nothingFoundMessage="No groups found"
-                                    hidePickedOptions
-                                    label="Show only selected groups"
-                                    description="Leave empty to show all"
-                                />
-                            </Box>
+            <Modal opened={aboutOpen} onClose={() => setAboutOpen(false)} title="About This Graph" size="lg" centered>
+                <Stack gap="md">
+                    <Text fw={700}>Interacting with the Graph</Text>
+                    <Text size="sm">
+                        - <b>Pan & Zoom:</b> Scroll or drag the background to explore.
+                        <br/>- <b>Hover:</b> Hover over a character to see their name and highlight their connections.
+                        <br/>- <b>Click Node:</b> Select a character to view their profile in the right panel.
+                        <br/>- <b>Click Edge:</b> Click the line between two characters to read the actual book excerpts where they interact.
+                    </Text>
+                    
+                    <Divider />
 
-                            <Box>
-                                <Group gap={4} mb="xs" wrap="nowrap" align="center">
-                                    <Title order={6} tt="uppercase" c="dimmed">Interaction Types</Title>
-                                    <Tooltip label="Show or hide specific types of interactions." multiline w={220} withArrow position="top">
-                                        <ActionIcon variant="transparent" color="gray" size="xs" aria-label="Info">
-                                            <IconInfoCircle size={14} />
-                                        </ActionIcon>
-                                    </Tooltip>
-                                </Group>
-                                <Stack gap="xs">
-                                    {availableInteractionTypes.map(type => (
-                                        <Checkbox
-                                            key={type}
-                                            label={type}
-                                            checked={selectedInteractionTypes.length === 0 || selectedInteractionTypes.includes(type)}
-                                            onChange={(e) => {
-                                                const checked = e.currentTarget.checked;
-                                                if (selectedInteractionTypes.length === 0) {
-                                                    // If currently "all", and we uncheck one, we need to select all others
-                                                    if (!checked) {
-                                                        setSelectedInteractionTypes(availableInteractionTypes.filter(t => t !== type));
-                                                    } else {
-                                                        setSelectedInteractionTypes([type]);
-                                                    }
-                                                } else {
-                                                    if (checked) {
-                                                        setSelectedInteractionTypes([...selectedInteractionTypes, type]);
-                                                    } else {
-                                                        setSelectedInteractionTypes(selectedInteractionTypes.filter(t => t !== type));
-                                                    }
-                                                }
-                                            }}
-                                        />
-                                    ))}
-                                </Stack>
-                            </Box>
-                        </Stack>
-                    </ScrollArea>
-                </Tabs.Panel>
-
-                <Tabs.Panel value="inspector" style={{ flex: 1, overflow: 'hidden' }}>
-                    <ScrollArea h="100%" offsetScrollbars>
-                        <Paper withBorder p="md" shadow="sm" radius="md" bg="gray.0">
-                            {selectedNode ? (
-                                <Stack gap="sm">
-                                    <Box>
-                                        <Title order={4} style={{ fontFamily: 'var(--mantine-font-family-headings)', color: 'var(--mantine-color-primary-9)' }}>
-                                            {selectedNode.id}
-                                        </Title>
-                                        <Text size="xs" c="dimmed" tt="uppercase" fw={700}>{selectedNode.groupName || 'Unknown Group'}</Text>
-                                    </Box>
-
-                                    <Group gap="xs">
-                                        <Badge color="primary" variant="light">Degree: {selectedNode.degree || 0}</Badge>
-                                        <Badge color="gray" variant="light">{nodeInteractions.length} Connections</Badge>
-                                    </Group>
-
-                                    <Divider my="xs" label="Interactions" labelPosition="center" />
-
-                                    {nodeInteractions.length > 0 ? (
-                                        <Accordion variant="separated" radius="md" chevronPosition="left">
-                                            {nodeInteractions.map((interaction) => (
-                                                <Accordion.Item key={interaction.otherId} value={interaction.otherId} mb="xs">
-                                                    <Accordion.Control>
-                                                        <Group justify="space-between">
-                                                            <Text size="sm" fw={600}>{interaction.otherId}</Text>
-                                                            <Badge size="xs" circle>{interaction.value}</Badge>
-                                                        </Group>
-                                                    </Accordion.Control>
-                                                    <Accordion.Panel>
-                                                        <Stack gap="xs">
-                                                            {interaction.interactions.map((detail, idx) => (
-                                                                <Paper key={idx} p="xs" bg="gray.1" radius="sm">
-                                                                    <Text size="xs" fw={700} c="primary" mb={2}>{detail.type}</Text>
-                                                                    <Text size="xs" style={{ lineHeight: 1.4 }}>"{detail.snippet}"</Text>
-                                                                </Paper>
-                                                            ))}
-                                                        </Stack>
-                                                    </Accordion.Panel>
-                                                </Accordion.Item>
-                                            ))}
-                                        </Accordion>
-                                    ) : (
-                                        <Text size="sm" c="dimmed" fs="italic">No visible connections in this chapter.</Text>
-                                    )}
-                                </Stack>
-                            ) : (
-                                <Stack align="center" py="xl" gap="xs">
-                                    <ThemeIcon size="xl" radius="xl" variant="light" color="gray">
-                                        <Text size="xl">👆</Text>
-                                    </ThemeIcon>
-                                    <Text c="dimmed" fs="italic" size="sm" ta="center">
-                                        Select a node to view details and evidence.
-                                    </Text>
-                                </Stack>
-                            )}
-                        </Paper>
-                    </ScrollArea>
-                </Tabs.Panel>
-            </Tabs>
+                    <Text fw={700}>Glossary of Metrics (Analytics Mode)</Text>
+                    <Text size="sm">
+                        <b>Agency Score:</b> Measures a character's active involvement in the narrative. A high score means they initiate many events, while a low score means they are mostly recipients.
+                    </Text>
+                    <Text size="sm">
+                        <b>Influence Ratio:</b> Indicates how much a character influences others or is discussed in the narrative context.
+                    </Text>
+                    <Text size="sm">
+                        <b>Mention in Absence:</b> Count of times a character is talked about when not physically present, reflecting their reputation or gossip value.
+                    </Text>
+                </Stack>
+            </Modal>
         </Stack>
     );
 };

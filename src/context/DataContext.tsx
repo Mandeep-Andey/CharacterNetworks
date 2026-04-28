@@ -1,207 +1,162 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import combinedChaptersData from '../data/combined_chapters_all_books_1_86_merged_final.json';
-import chapterToBookData from '../data/chapter_to_book.json';
-import charactersGroupedData from '../data/middlemarch_characters_grouped.json';
-import { detectCommunities } from '../utils/louvain';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import networkKnowledgeRaw from '../data/new_pipeline data/network_knowledge.json';
 
-import aliasesData from '../data/aliases.json';
+// We must cast the raw JSON to our interfaces.
+// The JSON has a specific shape we need to define.
 
-// Define types based on expected JSON structure
-export interface InteractionDetail {
-    type: string;
-    snippet: string;
+export interface InteractionEvidence {
+    xml_id: string;
+    book: number;
+    chapter: number;
+    text: string;
 }
 
-export interface Node {
+export interface KnowledgeMetrics {
+    agency_score: number;
+    influence_ratio: number;
+    total_events: number;
+    initiator_count: number;
+    recipient_count: number;
+    mention_in_absence_count: number;
+}
+
+export interface KnowledgeNode {
     id: string;
-    group: number;
-    groupName: string;
-    degree?: number;
-    community?: number;
+    display_name: string;
+    family_clique: string;
+    social_class: string;
+    gender: string;
+    metrics: KnowledgeMetrics;
 }
 
-export interface Link {
+export interface KnowledgeEdge {
     source: string;
     target: string;
-    value: number;
-    interactions: InteractionDetail[];
+    total_weight: number;
+    evidence: InteractionEvidence[];
 }
 
-export interface GraphData {
-    nodes: Node[];
-    links: Link[];
-}
-
-export interface ChapterData {
-    [key: string]: GraphData;
-}
-
-export interface BookChapters {
-    [key: string]: number[];
-}
-
-export interface CharacterGroup {
-    [key: string]: string[];
+export interface KnowledgeGraphData {
+    nodes: KnowledgeNode[];
+    links: KnowledgeEdge[];
 }
 
 interface DataContextType {
-    data: ChapterData;
-    chapters: BookChapters | null;
-    groups: CharacterGroup | null;
+    graphData: KnowledgeGraphData | null;
+    filteredGraphData: KnowledgeGraphData | null;
     loading: boolean;
+    currentBook: string;
+    setCurrentBook: (val: string) => void;
+    currentChapter: string;
+    setCurrentChapter: (val: string) => void;
+    availableBooks: string[];
+    availableChapters: string[];
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Helper to resolve aliases
-// Pre-process aliases for case-insensitive lookup
-const aliasMap = new Map<string, string>();
-Object.entries(aliasesData).forEach(([key, value]) => {
-    aliasMap.set(key.toLowerCase().trim(), value);
-});
-
-const resolveName = (name: string): string => {
-    if (!name) return "";
-    const lower = name.toLowerCase().trim();
-    return aliasMap.get(lower) || name.trim();
-};
-
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [data, setData] = useState<ChapterData>({});
-    const [chapters, setChapters] = useState<BookChapters | null>(null);
-    const [groups, setGroups] = useState<CharacterGroup | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [graphData, setGraphData] = useState<KnowledgeGraphData | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [currentBook, setCurrentBook] = useState<string>('1');
+    const [currentChapter, setCurrentChapter] = useState<string>('all');
 
     useEffect(() => {
+        setLoading(true);
         try {
-            // Process groups for easier lookup
-            const groupMap = new Map<string, { id: number, name: string }>();
-            const rawGroups = charactersGroupedData as CharacterGroup;
+            // The JSON is imported directly, so we can just use it
+            const data = networkKnowledgeRaw as any;
+            
+            // Map links source/target to string IDs if they aren't already
+            const processedLinks = data.edges.map((edge: any) => ({
+                ...edge,
+                source: edge.source,
+                target: edge.target,
+            }));
 
-            Object.keys(rawGroups).forEach((groupName, index) => {
-                rawGroups[groupName].forEach(charName => {
-                    // We should also map the canonical names in groups if they aren't already
-                    // But usually groups file uses canonical names.
-                    groupMap.set(charName, { id: index + 1, name: groupName });
+            // Artificial delay to allow smooth transitions and indicate loading state to the user
+            setTimeout(() => {
+                setGraphData({
+                    nodes: data.nodes,
+                    links: processedLinks
                 });
-            });
-
-            // Transform the raw data into the expected GraphData structure
-            const rawData = combinedChaptersData as any;
-            const transformedData: ChapterData = {};
-
-            Object.keys(rawData).forEach(chapterKey => {
-                const chapter = rawData[chapterKey];
-
-                // Collect all unique characters (resolved)
-                const uniqueChars = new Set<string>();
-
-                // Process explicit characters list
-                (chapter.characters || []).forEach((charName: string) => {
-                    uniqueChars.add(resolveName(charName));
-                });
-
-                // Process interactions to find characters and resolve them
-                (chapter.interactions || []).forEach((interaction: any) => {
-                    if (interaction.character_1) uniqueChars.add(resolveName(interaction.character_1));
-                    if (interaction.character_2) uniqueChars.add(resolveName(interaction.character_2));
-                });
-
-                // Create links first to use for community detection
-                const linkMap = new Map<string, Link>();
-                (chapter.interactions || []).forEach((interaction: any) => {
-                    const source = resolveName(interaction.character_1);
-                    const target = resolveName(interaction.character_2);
-
-                    if (!source || !target || source === target) return; // Skip invalid or self-loops if desired
-
-                    const [p1, p2] = [source, target].sort();
-                    const key = `${p1}|${p2}`;
-
-                    if (linkMap.has(key)) {
-                        const link = linkMap.get(key)!;
-                        link.value += 1;
-                        link.interactions.push({
-                            type: interaction.interaction_type,
-                            snippet: interaction.evidence_snippet
-                        });
-                    } else {
-                        linkMap.set(key, {
-                            source,
-                            target,
-                            value: 1,
-                            interactions: [{
-                                type: interaction.interaction_type,
-                                snippet: interaction.evidence_snippet
-                            }]
-                        });
-                    }
-                });
-                const links = Array.from(linkMap.values());
-
-                // Detect communities
-                const nodesForCommunity = Array.from(uniqueChars).map(id => ({ id }));
-                const communities = detectCommunities(nodesForCommunity, links);
-
-                // Create nodes with community info
-                const nodes: Node[] = Array.from(uniqueChars).map((charName: string) => {
-                    const groupInfo = groupMap.get(charName) || { id: 0, name: 'Unknown' };
-                    return {
-                        id: charName,
-                        group: groupInfo.id,
-                        groupName: groupInfo.name,
-                        degree: 0,
-                        community: communities[charName] || 0
-                    };
-                });
-
-                // Calculate degrees
-                const degreeMap = new Map<string, number>();
-                links.forEach(link => {
-                    degreeMap.set(link.source, (degreeMap.get(link.source) || 0) + link.value);
-                    degreeMap.set(link.target, (degreeMap.get(link.target) || 0) + link.value);
-                });
-
-                nodes.forEach(node => {
-                    node.degree = degreeMap.get(node.id) || 0;
-                });
-
-                transformedData[chapterKey] = { nodes, links };
-            });
-
-            // Transform chapter-to-book mapping
-            const rawChapterToBook = chapterToBookData as Record<string, number>;
-            const bookChaptersMap: BookChapters = {};
-            const toRoman = (num: number) => {
-                const roman = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
-                return roman[num] || num.toString();
-            };
-
-            Object.entries(rawChapterToBook).forEach(([chapterStr, bookNum]) => {
-                const bookName = `Book ${toRoman(bookNum)}`;
-                if (!bookChaptersMap[bookName]) {
-                    bookChaptersMap[bookName] = [];
-                }
-                bookChaptersMap[bookName].push(parseInt(chapterStr));
-            });
-
-            Object.keys(bookChaptersMap).forEach(book => {
-                bookChaptersMap[book].sort((a, b) => a - b);
-            });
-
-            setData(transformedData);
-            setChapters(bookChaptersMap);
-            setGroups(rawGroups);
-            setLoading(false);
-
-        } catch (err) {
-            console.error("Failed to load data", err);
+                setLoading(false);
+            }, 300);
+        } catch (error) {
+            console.error("Failed to parse network_knowledge.json", error);
             setLoading(false);
         }
     }, []);
 
+    const availableBooks = useMemo(() => {
+        if (!graphData) return [];
+        const books = new Set<string>();
+        graphData.links.forEach(link => {
+            link.evidence.forEach(ev => books.add(ev.book.toString()));
+        });
+        return Array.from(books).sort((a, b) => parseInt(a) - parseInt(b));
+    }, [graphData]);
+
+    const availableChapters = useMemo(() => {
+        if (!graphData) return [];
+        const chapters = new Set<string>();
+        graphData.links.forEach(link => {
+            link.evidence.forEach(ev => {
+                if (ev.book.toString() === currentBook) {
+                    chapters.add(ev.chapter.toString());
+                }
+            });
+        });
+        return Array.from(chapters).sort((a, b) => parseInt(a) - parseInt(b));
+    }, [graphData, currentBook]);
+
+    const filteredGraphData = useMemo(() => {
+        if (!graphData) return null;
+        
+        const bookNum = parseInt(currentBook);
+        const chapterNum = currentChapter === 'all' ? null : parseInt(currentChapter);
+
+        // First filter links based on book and (optionally) chapter
+        const filteredLinks = graphData.links.filter(link => 
+            link.evidence.some(ev => 
+                ev.book === bookNum && (chapterNum === null || ev.chapter === chapterNum)
+            )
+        ).map(link => ({
+            ...link,
+            // Only keep evidence related to the current selection for clarity in sidebar
+            evidence: link.evidence.filter(ev => 
+                ev.book === bookNum && (chapterNum === null || ev.chapter === chapterNum)
+            )
+        }));
+
+        // Identify which nodes are present in these filtered links
+        const activeNodeIds = new Set<string>();
+        filteredLinks.forEach(link => {
+            activeNodeIds.add(link.source);
+            activeNodeIds.add(link.target);
+        });
+
+        // Filter nodes
+        const filteredNodes = graphData.nodes.filter(node => activeNodeIds.has(node.id));
+
+        return {
+            nodes: filteredNodes,
+            links: filteredLinks
+        };
+    }, [graphData, currentBook, currentChapter]);
+
     return (
-        <DataContext.Provider value={{ data, chapters, groups, loading }}>
+        <DataContext.Provider value={{ 
+            graphData, 
+            filteredGraphData,
+            loading,
+            currentBook,
+            setCurrentBook,
+            currentChapter,
+            setCurrentChapter,
+            availableBooks,
+            availableChapters
+        }}>
             {children}
         </DataContext.Provider>
     );

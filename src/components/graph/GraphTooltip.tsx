@@ -23,7 +23,9 @@ const GraphTooltip: React.FC<GraphTooltipProps> = ({ tooltip }) => {
                 zIndex: 9999,
                 transform: 'translate(-50%, -100%)',
                 marginTop: '-8px',
-                pointerEvents: 'none'
+                pointerEvents: 'none',
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                backdropFilter: 'blur(4px)'
             }}
         >
             <Text size="xs" fw={700}>{tooltip.content}</Text>
